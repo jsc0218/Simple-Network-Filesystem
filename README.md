@@ -1,3 +1,3 @@
 # Simple-Network-Filesystem
 
-gRPC (client side with Java, server side with C++)
+implemented with gRPC and C++
