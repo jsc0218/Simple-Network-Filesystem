@@ -1,0 +1,27 @@
+syntax = "proto3";
+package SimpleNetworkFilesystem;
+
+service NFS {
+  rpc getattr (Path) returns (Stat) {}
+}
+
+message Path {
+  string path = 1;
+}
+
+message Stat {
+  uint64 dev = 1;  /* Device.  */
+  uint64 ino = 2;  /* File serial number.	*/
+  uint64 nlink = 3;  /* Link count.  */
+  uint32 mode = 4;  /* File mode.  */
+  uint32 uid = 5;  /* User ID of the file's owner.	*/
+  uint32 gid = 6;  /* Group ID of the file's group.*/
+  uint64 rdev = 7;  /* Device number, if device.  */
+  int64 size = 8;  /* Size of file, in bytes.  */
+  int64 blksize = 9;  /* Optimal block size for I/O.  */
+  int64 blocks = 10;  /* Number 512-byte blocks allocated. */
+  int64 atime = 11;  /* Time of last access.  */
+  int64 mtime = 12;  /* Time of last modification.  */
+  int64 ctime = 13;  /* Time of last status change.  */
+  int32 err = 14;  /* error number  */
+}
