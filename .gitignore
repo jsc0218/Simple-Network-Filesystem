@@ -2,3 +2,6 @@
 .cproject
 .project
 *.xml
+*.pb.*
+*.o
+/NFSServer
