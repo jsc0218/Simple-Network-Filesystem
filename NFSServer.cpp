@@ -17,17 +17,17 @@ using SimpleNetworkFilesystem::NFS;
 using namespace std;
 
 class NFSServiceImpl final : public NFS::Service {
-	string translatePath(const string& clientPath) {
-		return "/tmp/nfs" + clientPath;
-	}
+    string translatePath(const string& clientPath) {
+        return "/tmp/nfs" + clientPath;
+    }
 
-	Status getattr(ServerContext* context, const Path* path, Stat* reply) override {
+    Status getattr(ServerContext* context, const Path* path, Stat* reply) override {
 	    string serverPath = translatePath(path->path());
-		struct stat st;
+        struct stat st;
         int res = stat(serverPath.c_str(), &st);
         if (res == -1) {
-        	cout << "getattr errno:" << errno << endl;
-        	reply->set_err(errno);
+            cout << "getattr errno:" << errno << endl;
+            reply->set_err(errno);
         } else {
 	        reply->set_dev(st.st_dev);
 	        reply->set_ino(st.st_ino);
@@ -49,8 +49,8 @@ class NFSServiceImpl final : public NFS::Service {
 };
 
 void RunServer() {
-	string server_address("127.0.0.1:8080");
-	NFSServiceImpl service;
+    string server_address("127.0.0.1:8080");
+    NFSServiceImpl service;
 
     ServerBuilder builder;
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
