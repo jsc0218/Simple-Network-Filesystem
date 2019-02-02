@@ -20,7 +20,7 @@ PROTOS_PATH = ./
 
 vpath %.proto $(PROTOS_PATH)
 
-all: system-check NFSServer
+all: system-check NFSClient NFSServer
 
 NFSClient: NFS.pb.o NFS.grpc.pb.o NFSClient.o
 	$(CXX) $^ $(LDFLAGS) -o $@
