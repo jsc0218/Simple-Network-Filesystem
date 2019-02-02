@@ -22,7 +22,7 @@ class NFSServiceImpl final : public NFS::Service {
     }
 
     Status getattr(ServerContext* context, const Path* path, Stat* reply) override {
-	    string serverPath = translatePath(path->path());
+        string serverPath = translatePath(path->path());
         struct stat st;
         int res = stat(serverPath.c_str(), &st);
         if (res == -1) {
