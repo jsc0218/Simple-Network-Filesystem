@@ -6,6 +6,8 @@
 #include <string.h>
 #include <getopt.h>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 using namespace std;
 
@@ -16,7 +18,9 @@ using namespace std;
 =========================================================*/
 
 static int handle_getattr( const char* path, struct stat* st ) {
-    if (strcmp(path, "/") == 0) {
+    string pathStr = path;
+
+    if (pathStr == "/") {
         st->st_mode = S_IFDIR | 0755;
         st->st_nlink = 2;
         return 0;
@@ -49,6 +53,7 @@ static int handle_open( const char* path, struct fuse_file_info* fi) {
 
 static int handle_read( const char* path, char* buf, size_t size, off_t offset,
                         struct fuse_file_info* fi) {
+    
     const char* contents = "asdf";
     
     if (strcmp(path, "/blah") == 0) {
@@ -113,23 +118,35 @@ int main(int argc, char** argv) {
     // local dir we wish to mount on
     struct fuse_args args = FUSE_ARGS_INIT(0, NULL);
     fuse_opt_add_arg(&args, argv[0]);
-    char* remote_mount = NULL, * local_mount = NULL;
+    string remote_mount, local_mount, port = "8080";
+    string remote_address, remote_dir;
     int c;
-    while ((c = getopt(argc, argv, "r:l:")) != -1) {
+    while ((c = getopt(argc, argv, "r:l:p:")) != -1) {
         switch (c) {
             case 'r':
-                remote_mount = strdup(optarg);
+                remote_mount.assign(optarg);
                 break;
             case 'l':
-                local_mount = strdup(optarg);
-                fuse_opt_add_arg(&args, local_mount);
+                local_mount.assign(optarg);
+                fuse_opt_add_arg(&args, local_mount.c_str());
+                break;
+            case 'p':
+                port.assign(optarg);
                 break;
         }
     }
-    if (remote_mount == NULL || local_mount == NULL) {
-        cerr << "usage: " << argv[0] << " -r remote_address -l local_mountpoint\n";
+
+    remote_mount.replace(remote_mount.begin(), remote_mount.end(), ':', ' ');
+    stringstream ss(remote_mount);
+
+    if ( remote_mount.size() == 0 || local_mount.size() == 0 ||
+         !(ss >> remote_address && ss >> remote_dir) ) {
+        cerr << "usage: " << argv[0] << " -r remote_address:remote_dir [-p port] -l local_mountpoint\n";
         return 1;
     }
-    
+
+    remote_address += ":" + port;
+    cout << "Mounting to " << remote_dir << " at " << remote_address << endl;
+
     return fuse_main(args.argc, args.argv, &fs_ops, NULL);
 }
