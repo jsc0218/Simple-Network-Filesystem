@@ -77,8 +77,8 @@ static int handle_getattr( const char* path, struct stat* st ) {
         st->st_dev = stat.dev();
         st->st_ino = stat.ino();
         st->st_nlink = stat.nlink();
-        st->st_uid = getuid();
-        st->st_gid = getegid();
+        st->st_uid = stat.uid(); //getuid();
+        st->st_gid = stat.gid(); //getegid();
         st->st_rdev = stat.rdev();
         st->st_blksize = stat.blksize();
         st->st_blocks = stat.blocks();
@@ -199,9 +199,12 @@ int main(int argc, char** argv) {
     remote_address += ":" + port;
     cout << "Mounting to " << remote_dir << " at " << remote_address << endl;
 
-    shared_ptr<Channel> channel = grpc::CreateChannel(remote_address,
-        grpc::InsecureChannelCredentials());
+    shared_ptr<Channel> channel = grpc::CreateChannel(remote_address, grpc::InsecureChannelCredentials());
     nfs_client.reset(new NFSClient(channel));
+
+    // Seems to need this to work for some reason
+    Stat stat;
+    nfs_client->getAttr("/", &stat);
 
     return fuse_main(args.argc, args.argv, &fs_ops, NULL);
 }
