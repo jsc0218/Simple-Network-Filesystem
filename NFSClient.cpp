@@ -71,7 +71,6 @@ static int handle_getattr( const char* path, struct stat* st ) {
     string pathStr = path;
 
     Stat stat;
-    cout << "getattr for path " << pathStr << endl;
     int status = nfs_client->getAttr(pathStr, &stat);
     if (status == 0 && stat.err() == 0) {
         st->st_mode = stat.mode();
