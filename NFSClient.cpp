@@ -15,7 +15,7 @@
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
-#include <NFS.grpc.pb.h>
+#include "NFS.grpc.pb.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -28,9 +28,38 @@ using SimpleNetworkFilesystem::Path;
 using SimpleNetworkFilesystem::Stat;
 using SimpleNetworkFilesystem::NFS;
 
-#include "NFS.grpc.pb.h"
-
 using namespace std;
+
+/*=======================================================
+
+    gRPC Connections to Server
+
+=========================================================*/
+
+class NFSClient {
+    private:
+
+    unique_ptr<NFS::Stub> stub_;
+
+    public:
+
+    NFSClient(shared_ptr<Channel> chan) : stub_(NFS::NewStub(chan)) {
+    }
+
+    int getAttr( const string& path, Stat* stat ) {
+        Path path_message;
+        path_message.set_path(path);
+        ClientContext context;
+        Status status = stub_->getattr(&context, path_message, stat);
+        if (!status.ok()) {
+            return -(status.error_code());
+        }
+        return 0;
+    }
+};
+
+shared_ptr<NFSClient> nfs_client;
+
 
 /*=======================================================
 
@@ -41,30 +70,26 @@ using namespace std;
 static int handle_getattr( const char* path, struct stat* st ) {
     string pathStr = path;
 
-    if (pathStr == "/") {
-        st->st_mode = S_IFDIR | 0755;
-        st->st_nlink = 2;
+    Stat stat;
+    cout << "getattr for path " << pathStr << endl;
+    int status = nfs_client->getAttr(pathStr, &stat);
+    if (status == 0 && stat.err() == 0) {
+        st->st_mode = stat.mode();
+        st->st_dev = stat.dev();
+        st->st_ino = stat.ino();
+        st->st_nlink = stat.nlink();
+        st->st_uid = getuid();
+        st->st_gid = getegid();
+        st->st_rdev = stat.rdev();
+        st->st_blksize = stat.blksize();
+        st->st_blocks = stat.blocks();
+        st->st_size = stat.size();
+        st->st_atim.tv_sec = stat.atime();
+        st->st_mtim.tv_sec = stat.mtime();
+        st->st_ctim.tv_sec = stat.ctime();
         return 0;
     }
-    else {
-        Stat stat;
-        int status = nfs_client->getAttr(pathStr, &stat);
-        if (status == 0 && stat.err() == 0) {
-            st->st_mode = stat.mode() | 0777;
-            st->st_dev = stat.dev();
-            st->st_ino = stat.ino();
-            st->st_nlink = stat.nlink();
-            st->st_uid = getuid();
-            st->st_gid = getpid();
-            st->st_rdev = stat.rdev();
-            st->st_blksize = stat.blksize();
-            st->st_blocks = stat.blocks();
-            st->st_atim.tv_sec = stat.atime();
-            st->st_mtim.tv_sec = stat.mtime();
-            st->st_ctim.tv_sec = stat.ctime();
-            return 0;
-        }
-    }
+
     return -ENOENT;
 }
 
@@ -136,38 +161,6 @@ static struct fs_operations : fuse_operations {
         unlink   = handle_unlink;   
     }
 } fs_ops;
-
-
-/*=======================================================
-
-    gRPC Connections to Server
-
-=========================================================*/
-
-class NFSClient {
-
-    private:
-
-    unique_ptr<NFS::Stub> stub_;
-
-    public:
-
-    NFSClient(shared_ptr<Channel> chan) : stub_(NFS::NewStub(chan)) {
-    }
-
-    int getAttr( const string& path, Stat* stat ) {
-        Path path_message;
-        path_message.set_path(path);
-        ClientContext context;
-        Status status = stub_->getattr(&context, path_message, stat);
-        if (!status.ok()) {
-            return -status.error_code;
-        }
-        return 0;
-    }
-};
-
-shared_ptr<NFSClient> nfs_client;
 
 int main(int argc, char** argv) {
 
