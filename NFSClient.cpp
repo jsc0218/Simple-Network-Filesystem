@@ -94,8 +94,8 @@ static int handle_getattr( const char* path, struct stat* st ) {
 
 static int handle_readdir( const char* path, void* buf, fuse_fill_dir_t filler,
                             off_t offset, struct fuse_file_info* fi ) {
-    filler(buf, ".", NULL, 0);
-    filler(buf, "..", NULL, 0);
+    //filler(buf, ".", NULL, 0);
+    //filler(buf, "..", NULL, 0);
     //filler(buf, "blah", NULL, 0);
     //filler(buf, "asdf", NULL, 0);
     return 0;
@@ -167,6 +167,7 @@ int main(int argc, char** argv) {
     // local dir we wish to mount on
     struct fuse_args args = FUSE_ARGS_INIT(0, NULL);
     fuse_opt_add_arg(&args, argv[0]);
+    fuse_opt_add_arg(&args, "-f"); // Run client in the foreground, to prevent a weird gRPC race condition
     string remote_mount, local_mount, port = "8080";
     string remote_address, remote_dir;
     int c;
@@ -201,10 +202,6 @@ int main(int argc, char** argv) {
 
     shared_ptr<Channel> channel = grpc::CreateChannel(remote_address, grpc::InsecureChannelCredentials());
     nfs_client.reset(new NFSClient(channel));
-
-    // Seems to need this to work for some reason
-    Stat stat;
-    nfs_client->getAttr("/", &stat);
 
     return fuse_main(args.argc, args.argv, &fs_ops, NULL);
 }
