@@ -1,3 +1,12 @@
 # Simple-Network-Filesystem
 
-implemented with gRPC and C++
+Implemented with gRPC and C++
+
+## To run the client
+
+Example:
+```
+mkdir temp
+make
+./NFSClient -r localhost:/ -l temp
+```
