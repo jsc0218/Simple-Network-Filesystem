@@ -38,27 +38,68 @@ using namespace std;
 
 class NFSClient {
     private:
-
-    unique_ptr<NFS::Stub> stub_;
+    unique_ptr<NFS::Stub> stub;
 
     public:
-
-    NFSClient(shared_ptr<Channel> chan) : stub_(NFS::NewStub(chan)) {
-    }
+    NFSClient(shared_ptr<Channel> channel) : stub(NFS::NewStub(channel)) {}
 
     int getAttr( const string& path, Stat* stat ) {
-        Path path_message;
-        path_message.set_path(path);
+        Path pathMessage;
+        pathMessage.set_path(path);
         ClientContext context;
-        Status status = stub_->getattr(&context, path_message, stat);
+        Status status = stub->getattr(&context, pathMessage, stat);
         if (!status.ok()) {
             return -(status.error_code());
         }
         return 0;
     }
+
+    int readdir() {
+        return 0;
+    }
+
+    int rmdir() {
+        return 0;
+    }
+
+    int mkdir() {
+        return 0;
+    }
+
+    int create() {
+        return 0;
+    }
+
+    int mkdnod() {
+        return 0;
+    }
+
+    int open() {
+        return 0;
+    }
+
+    int read() {
+        return 0;
+    }
+
+    int write() {
+        return 0;
+    }
+
+    int unlink() {
+        return 0;
+    }
+
+    int rename() {
+        return 0;
+    }
+
+    int utimens() {
+        return 0;
+    }
 };
 
-shared_ptr<NFSClient> nfs_client;
+shared_ptr<NFSClient> nfsClient;
 
 
 /*=======================================================
@@ -67,11 +108,10 @@ shared_ptr<NFSClient> nfs_client;
 
 =========================================================*/
 
-static int handle_getattr( const char* path, struct stat* st ) {
+static int handleGetattr( const char* path, struct stat* st ) {
     string pathStr = path;
-
     Stat stat;
-    int status = nfs_client->getAttr(pathStr, &stat);
+    int status = nfsClient->getAttr(pathStr, &stat);
     if (status == 0 && stat.err() == 0) {
         st->st_mode = stat.mode();
         st->st_dev = stat.dev();
@@ -88,29 +128,37 @@ static int handle_getattr( const char* path, struct stat* st ) {
         st->st_ctim.tv_sec = stat.ctime();
         return 0;
     }
-
     return -ENOENT;
 }
 
-static int handle_readdir( const char* path, void* buf, fuse_fill_dir_t filler,
-                            off_t offset, struct fuse_file_info* fi ) {
-    //filler(buf, ".", NULL, 0);
-    //filler(buf, "..", NULL, 0);
-    //filler(buf, "blah", NULL, 0);
-    //filler(buf, "asdf", NULL, 0);
+static int handleReaddir( const char* path, void* buf, fuse_fill_dir_t filler,
+                          off_t offset, struct fuse_file_info* fi ) {
     return 0;
 }
 
-static int handle_rmdir( const char* path ) {
+static int handleRmdir( const char* path ) {
     return 0;
 }
 
-static int handle_open( const char* path, struct fuse_file_info* fi) {
+static int handleMkdir( const char* path, mode_t mode ) {
     return 0;
 }
 
-static int handle_read( const char* path, char* buf, size_t size, off_t offset,
-                        struct fuse_file_info* fi) {
+static int handleCreate( const char* path, mode_t mode,
+                         struct fuse_file_info* fi ) {
+    return 0;
+}
+
+static int handleMknod( const char* path, mode_t mode, dev_t dev ) {
+    return 0;
+}
+
+static int handleOpen( const char* path, struct fuse_file_info* fi) {
+    return 0;
+}
+
+static int handleRead( const char* path, char* buf, size_t size, off_t offset,
+                       struct fuse_file_info* fi) {
     
     const char* contents = "asdf";
     
@@ -130,36 +178,39 @@ static int handle_read( const char* path, char* buf, size_t size, off_t offset,
     return -ENOENT;
 }
 
-static int handle_write( const char* path, const char* buf, size_t size, off_t offset,
-                         struct fuse_file_info* fi ) {
+static int handleWrite( const char* path, const char* buf, size_t size, off_t offset,
+                        struct fuse_file_info* fi ) {
     return 0;
 }
 
-static int handle_unlink( const char* path ) {
+static int handleUnlink( const char* path ) {
     return 0;
 }
 
-static int handle_create( const char* path, mode_t mode,
-                          struct fuse_file_info* fi ) {
+static int handleRename( const char* path, const char* newPath ) {
     return 0;
 }
 
-static struct fs_operations : fuse_operations {
-    fs_operations() {
-        getattr  = handle_getattr;
-        
-        // Directory operations
-        readdir  = handle_readdir;
-        rmdir    = handle_rmdir;
-        
-        // File operations
-        read     = handle_read;
-        write    = handle_write;
-        open     = handle_open;
-        create   = handle_create;
-        unlink   = handle_unlink;   
+static int handleUtimens( const char* path, const struct timespec* tv ) {
+    return 0;
+}
+
+static struct fsOperations : fuse_operations {
+    fsOperations() {
+        getattr = handleGetattr;
+        readdir = handleReaddir;
+        rmdir   = handleRmdir;
+        mkdir   = handleMkdir;
+        create  = handleCreate;
+        mknod   = handleMknod;
+        open    = handleOpen;
+        read    = handleRead;
+        write   = handleWrite;
+        unlink  = handleUnlink;
+        rename  = handleRename;
+        utimens = handleUtimens;
     }
-} fs_ops;
+} fsOps;
 
 int main(int argc, char** argv) {
 
@@ -168,17 +219,17 @@ int main(int argc, char** argv) {
     struct fuse_args args = FUSE_ARGS_INIT(0, NULL);
     fuse_opt_add_arg(&args, argv[0]);
     fuse_opt_add_arg(&args, "-f"); // Run client in the foreground, to prevent a weird gRPC race condition
-    string remote_mount, local_mount, port = "8080";
-    string remote_address, remote_dir;
+    string remoteMount, localMount, port = "8080";
+    string remoteAddress, remoteDir;
     int c;
     while ((c = getopt(argc, argv, "r:l:p:")) != -1) {
         switch (c) {
             case 'r':
-                remote_mount.assign(optarg);
+                remoteMount.assign(optarg);
                 break;
             case 'l':
-                local_mount.assign(optarg);
-                fuse_opt_add_arg(&args, local_mount.c_str());
+                localMount.assign(optarg);
+                fuse_opt_add_arg(&args, localMount.c_str());
                 break;
             case 'p':
                 port.assign(optarg);
@@ -186,22 +237,22 @@ int main(int argc, char** argv) {
         }
     }
 
-    replace(remote_mount.begin(), remote_mount.end(), ':', ' ');
-    cout << remote_mount << endl;
-    stringstream ss(remote_mount);
+    replace(remoteMount.begin(), remoteMount.end(), ':', ' ');
+    cout << remoteMount << endl;
+    stringstream ss(remoteMount);
 
-    if ( remote_mount.size() == 0 || local_mount.size() == 0 ||
-         !(ss >> remote_address && ss >> remote_dir) ) {
-        cout << remote_address << "    " << remote_dir;
+    if ( remoteMount.size() == 0 || localMount.size() == 0 ||
+         !(ss >> remoteAddress && ss >> remoteDir) ) {
+        cout << remoteAddress << "    " << remoteDir;
         cerr << "usage: " << argv[0] << " -r remote_address:remote_dir [-p port] -l local_mountpoint\n";
         return 1;
     }
 
-    remote_address += ":" + port;
-    cout << "Mounting to " << remote_dir << " at " << remote_address << endl;
+    remoteAddress += ":" + port;
+    cout << "Mounting to " << remoteDir << " at " << remoteAddress << endl;
 
-    shared_ptr<Channel> channel = grpc::CreateChannel(remote_address, grpc::InsecureChannelCredentials());
-    nfs_client.reset(new NFSClient(channel));
+    shared_ptr<Channel> channel = grpc::CreateChannel(remoteAddress, grpc::InsecureChannelCredentials());
+    nfsClient.reset(new NFSClient(channel));
 
-    return fuse_main(args.argc, args.argv, &fs_ops, NULL);
+    return fuse_main(args.argc, args.argv, &fsOps, NULL);
 }
