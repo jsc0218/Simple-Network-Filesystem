@@ -28,6 +28,12 @@ using SimpleNetworkFilesystem::Path;
 using SimpleNetworkFilesystem::Stat;
 using SimpleNetworkFilesystem::NFS;
 using SimpleNetworkFilesystem::Dirent;
+using SimpleNetworkFilesystem::MkdirRequest;
+using SimpleNetworkFilesystem::DirReply;
+using SimpleNetworkFilesystem::CreateRequest;
+using SimpleNetworkFilesystem::FuseFileInfo;
+using SimpleNetworkFilesystem::ReadReply;
+using SimpleNetworkFilesystem::ReadRequest;
 
 using namespace std;
 
@@ -45,23 +51,21 @@ class NFSClient {
     NFSClient(shared_ptr<Channel> channel) : stub(NFS::NewStub(channel)) {}
 
     int getAttr( const string& path, Stat* stat ) {
-        cout << "getAttr for " << path << endl;
+        ClientContext context;
         Path pathMessage;
         pathMessage.set_path(path);
-        ClientContext context;
         Status status = stub->getattr(&context, pathMessage, stat);
         if (!status.ok()) {
-            return -(status.error_code());
+            return -status.error_code();
         }
-        return 0;
+        return -stat->err();
     }
 
     int readdir( const string& path, vector<Dirent>& entries ) {
         ClientContext context;
         Path pathMessage;
         pathMessage.set_path(path);
-        unique_ptr<ClientReader<Dirent>> reader(
-            stub->readdir(&context, pathMessage));
+        unique_ptr<ClientReader<Dirent>> reader(stub->readdir(&context, pathMessage));
 
         Dirent entry;
         while(reader->Read(&entry)){
@@ -70,56 +74,111 @@ class NFSClient {
             }
             entries.push_back(entry);
         }
-
         Status status = reader->Finish();
         if (!status.ok()) {
-            return -(status.error_code());
+            return -status.error_code();
         }
-
-        int err = entry.err();
-        if (err != 0) {
-            return -err;
-        }
-        return 0;
+        return -entry.err();
     }
 
     int rmdir( const string& path ) {
+        ClientContext context;
+        Path pathMessage;
+        pathMessage.set_path(path);
+        DirReply response;
+        Status status = stub->rmdir(&context, pathMessage, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
+    }
+
+    int mkdir( const string& path, uint32_t mode ) {
+        ClientContext context;
+        MkdirRequest request;
+        request.set_path(path);
+        request.set_mode(mode);
+        DirReply response;
+        Status status = stub->mkdir(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
+    }
+
+    int create( const string& path, uint32_t mode, int32_t flags, uint64_t& fh ) {
+        ClientContext context;
+        CreateRequest request;
+        request.set_path(path);
+        request.set_mode(mode);
+        request.set_flags(flags);
+        FuseFileInfo response;
+        Status status = stub->create(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        if (response.err() != 0) {
+            return -response.err();
+        }
+        fh = response.fh();
         return 0;
     }
 
-    int mkdir() {
-        return 0;
+    int mkdnod( const string& path ) {
+        ClientContext context;
+
     }
 
-    int create() {
-        return 0;
+    int open( const string& path, int32_t flags, uint64_t& fileHandle ) {
+        ClientContext context;
+        FuseFileInfo request, response;
+        request.set_path(path);
+        request.set_flags(flags);
+        Status status = stub->open(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        fileHandle = response.fh();
+        return -response.err();
     }
 
-    int mkdnod() {
-        return 0;
-    }
-
-    int open() {
-        return 0;
-    }
-
-    int read() {
-        return 0;
+    int read( const string& path, uint64_t count, int64_t offset, string& buf, unsigned long& bytesRead ) {
+        ClientContext context;
+        ReadRequest request;
+        request.set_path(path);
+        request.set_count(count);
+        request.set_offset(offset);
+        ReadReply response;
+        Status status = stub->read(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        bytesRead = response.bytes_read();
+        buf = response.buffer();
+        return -response.err();
     }
 
     int write() {
+        ClientContext context;
+
         return 0;
     }
 
     int unlink( const string& path ) {
+        ClientContext context;
+
         return 0;
     }
 
-    int rename( const string& oldName , const string& newName ) {
+    int rename( const string& oldName, const string& newName ) {
+        ClientContext context;
+
         return 0;
     }
 
     int utimens( const string& path, uint64_t seconds, uint64_t nanoseconds ) {
+        ClientContext context;
+
         return 0;
     }
 };
@@ -134,10 +193,9 @@ shared_ptr<NFSClient> nfsClient;
 =========================================================*/
 
 static int handleGetattr( const char* path, struct stat* st ) {
-    string pathStr(path);
     Stat stat;
-    int status = nfsClient->getAttr(pathStr, &stat);
-    if (status == 0 && stat.err() == 0) {
+    int status = nfsClient->getAttr(path, &stat);
+    if (status == 0) {
         st->st_mode = stat.mode();
         st->st_dev = stat.dev();
         st->st_ino = stat.ino();
@@ -151,45 +209,31 @@ static int handleGetattr( const char* path, struct stat* st ) {
         st->st_atim.tv_sec = stat.atime();
         st->st_mtim.tv_sec = stat.mtime();
         st->st_ctim.tv_sec = stat.ctime();
-        return 0;
     }
-    return -ENOENT;
+    return status;
 }
 
 static int handleReaddir( const char* path, void* buf, fuse_fill_dir_t filler,
                           off_t offset, struct fuse_file_info* fi ) {
-
-    string pathStr(path);
     vector<Dirent> entries;
-    int status = nfsClient->readdir(pathStr, entries);
-    if (status != 0) {
-        return status;
-    }
-
-    for (vector<Dirent>::iterator it = entries.begin(); it != entries.end(); ++it) {
-        if (it->err() != 0) {
-            status = it->err();
-            break;
+    int status = nfsClient->readdir(path, entries);
+    if (status == 0) {
+        for (vector<Dirent>::iterator it = entries.begin(); it != entries.end(); ++it) {
+            struct stat stat{};
+            stat.st_ino = it->ino();
+            stat.st_mode = (it->type().length() > 0 ? it->type()[0] : 0) << 12;
+            filler(buf, it->name().c_str(), &stat, 0);
         }
-        struct stat stat{};
-        unsigned char typeChar = it->type().length() > 0 ? it->type()[0] : 0;
-        stat.st_ino = it->ino();
-        stat.st_mode = typeChar << 12;
-        filler(buf, it->name().c_str(), &stat, 0);
     }
-
-    if (status != 0) {
-        return status;
-    }
-    return 0;
+    return status;
 }
 
 static int handleRmdir( const char* path ) {
-    return 0;
+    return nfsClient->rmdir(path);
 }
 
 static int handleMkdir( const char* path, mode_t mode ) {
-    return 0;
+    return nfsClient->mkdir(path, mode);
 }
 
 static int handleCreate( const char* path, mode_t mode,
@@ -202,12 +246,24 @@ static int handleMknod( const char* path, mode_t mode, dev_t dev ) {
 }
 
 static int handleOpen( const char* path, struct fuse_file_info* fi) {
-    return 0;
+    uint64_t fileHandle;
+    int status = nfsClient->open(path, fi->flags, fileHandle);
+    if (status == 0) {
+        fi->fh = fileHandle;
+    }
+    return status;
 }
 
 static int handleRead( const char* path, char* buf, size_t size, off_t offset,
                        struct fuse_file_info* fi) {
-    return -ENOENT;
+    string readBuffer;
+    unsigned long bytesRead;
+    int status = nfsClient->read(path, size, offset, readBuffer, bytesRead);
+    if (status == 0) {
+        memcpy(buf, readBuffer.c_str(), bytesRead);
+        return bytesRead;
+    }
+    return status;
 }
 
 static int handleWrite( const char* path, const char* buf, size_t size, off_t offset,
@@ -216,8 +272,7 @@ static int handleWrite( const char* path, const char* buf, size_t size, off_t of
 }
 
 static int handleUnlink( const char* path ) {
-    string pathStr(path);
-    int status = nfsClient->unlink(pathStr);
+    int status = nfsClient->unlink(path);
     if (status != 0) {
 
     }
@@ -225,8 +280,7 @@ static int handleUnlink( const char* path ) {
 }
 
 static int handleRename( const char* oldName, const char* newName ) {
-    string oldPathStr(oldName), newPathStr(newName);
-    int status = nfsClient->rename(oldPathStr, newPathStr);
+    int status = nfsClient->rename(oldName, newName);
     if (status != 0) {
 
     }
@@ -234,9 +288,8 @@ static int handleRename( const char* oldName, const char* newName ) {
 }
 
 static int handleUtimens( const char* path, const struct timespec* tv ) {
-    string pathStr(path);
     uint64_t seconds = tv->tv_sec, nanoseconds = tv->tv_nsec;
-    int status = nfsClient->utimens(pathStr, seconds, nanoseconds);
+    int status = nfsClient->utimens(path, seconds, nanoseconds);
     if (status != 0) {
 
     }
