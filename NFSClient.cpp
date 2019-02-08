@@ -37,6 +37,7 @@ using SimpleNetworkFilesystem::ReadRequest;
 using SimpleNetworkFilesystem::WriteRequest;
 using SimpleNetworkFilesystem::WriteReply;
 using SimpleNetworkFilesystem::RenameRequest;
+using SimpleNetworkFilesystem::UtimensRequest;
 
 using namespace std;
 
@@ -208,9 +209,19 @@ class NFSClient {
         return -response.err();
     }
 
-    int utimens( const string& path, uint64_t seconds, uint64_t nanoseconds ) {
+    int utimens( const string& path, uint64_t accessedSec, uint64_t accessedNano, uint64_t modifiedSec, uint64_t modifiedNano ) {
         ClientContext context;
-        return 0;
+        UtimensRequest request;
+        request.set_access_sec(accessedSec);
+        request.set_access_nsec(accessedNano);
+        request.set_modify_sec(modifiedSec);
+        request.set_modify_nsec(modifiedNano);
+        ErrnoReply response;
+        Status status = stub->utimens(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
     }
 };
 
@@ -310,12 +321,9 @@ static int handleRename( const char* oldName, const char* newName ) {
 }
 
 static int handleUtimens( const char* path, const struct timespec* tv ) {
-    uint64_t seconds = tv->tv_sec, nanoseconds = tv->tv_nsec;
-    int status = nfsClient->utimens(path, seconds, nanoseconds);
-    if (status != 0) {
-
-    }
-    return 0;
+    uint64_t accessedSec = tv[0].tv_sec, accessedNano = tv[0].tv_nsec;
+    uint64_t modifiedSec = tv[1].tv_sec, modifiedNano = tv[1].tv_nsec;
+    return nfsClient->utimens(path, accessedSec, accessedNano, modifiedSec, modifiedNano);
 }
 
 static struct fsOperations : fuse_operations {
@@ -331,7 +339,7 @@ static struct fsOperations : fuse_operations {
         write   = handleWrite;
         unlink  = handleUnlink;
         rename  = handleRename;
-        //utimens = handleUtimens;
+        utimens = handleUtimens;
     }
 } fsOps;
 
