@@ -89,6 +89,30 @@ class NFSServiceImpl final : public NFS::Service {
         return Status::OK;
     }
 
+    Status read(ServerContext* context, const ReadRequest* request,
+    		    ReadReply* reply) override {
+        char* buf = new char[request->count()];
+        string serverPath = translatePath(request->path());
+        int fd = ::open(serverPath.c_str(), O_RDONLY);
+        if (fd == -1) {
+            cout << "read errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            int bytes_read = pread(fd, buf, request->count(), request->offset());
+            if (bytes_read == -1) {
+            	cout << "read errno:" << errno << endl;
+                reply->set_err(errno);
+            } else {
+                reply->set_bytes_read(bytes_read);
+                reply->set_buffer(buf);
+                reply->set_err(0);
+            }
+        }
+        close(fd);
+        delete[] buf;
+
+        return Status::OK;
+    }
 };
 
 void RunServer() {

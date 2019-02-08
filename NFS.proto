@@ -5,6 +5,7 @@ service NFS {
   rpc getattr (Path) returns (Stat) {}
   rpc readdir(Path) returns (stream Dirent) {}
   rpc open(FuseFileInfo) returns (FuseFileInfo) {}
+  rpc read(ReadRequest) returns (ReadReply) {}
 }
 
 message Path {
@@ -44,4 +45,16 @@ message FuseFileInfo {
   uint64 lock_owner = 4;  // Lock owner id.  Available in locking operations and flush
   int32 err = 5;
   string path = 6;
+}
+
+message ReadRequest {
+  string path = 1;
+  uint64 count = 2;
+  int64 offset = 3;
+}
+
+message ReadReply {
+  int32 bytes_read = 1;
+  bytes buffer = 2;
+  int32 err = 3;
 }
