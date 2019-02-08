@@ -3,6 +3,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <grpcpp/grpcpp.h>
 #include "NFS.grpc.pb.h"
 
@@ -70,6 +72,23 @@ class NFSServiceImpl final : public NFS::Service {
     	writer->Write(dirent);
         return Status::OK;
     }
+
+    Status open(ServerContext* context, const FuseFileInfo* request,
+                FuseFileInfo* reply) override {
+    	// where to get writepage and lock_owner?
+        string serverPath = translatePath(request->path());
+        int fh = ::open(serverPath.c_str(), request->flags());
+        if (fh == -1) {
+            cout << "open errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_fh(fh);
+            reply->set_err(0);
+        }
+        close(fh);
+        return Status::OK;
+    }
+
 };
 
 void RunServer() {
