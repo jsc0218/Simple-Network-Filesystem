@@ -36,6 +36,7 @@ using SimpleNetworkFilesystem::ReadReply;
 using SimpleNetworkFilesystem::ReadRequest;
 using SimpleNetworkFilesystem::WriteRequest;
 using SimpleNetworkFilesystem::WriteReply;
+using SimpleNetworkFilesystem::RenameRequest;
 
 using namespace std;
 
@@ -184,19 +185,31 @@ class NFSClient {
 
     int unlink( const string& path ) {
         ClientContext context;
-
-        return 0;
+        Path request;
+        request.set_path(path);
+        ErrnoReply response;
+        Status status = stub->unlink(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
     }
 
     int rename( const string& oldName, const string& newName ) {
         ClientContext context;
-
-        return 0;
+        RenameRequest request;
+        request.set_from_path(oldName);
+        request.set_to_path(newName);
+        ErrnoReply response;
+        Status status = stub->rename(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
     }
 
     int utimens( const string& path, uint64_t seconds, uint64_t nanoseconds ) {
         ClientContext context;
-
         return 0;
     }
 };
@@ -278,7 +291,6 @@ static int handleRead( const char* path, char* buf, size_t size, off_t offset,
     int status = nfsClient->read(path, size, offset, readBuffer);
     if (status >= 0) {
         memcpy(buf, readBuffer.c_str(), status);
-        return status;
     }
     return status;
 }
@@ -286,27 +298,15 @@ static int handleRead( const char* path, char* buf, size_t size, off_t offset,
 static int handleWrite( const char* path, const char* buf, size_t size, off_t offset,
                         struct fuse_file_info* fi ) {
     string writeBuf = string(buf, size);
-    int status = nfsClient->write(path, writeBuf, size, offset);
-    if (status >= 0) {
-        return status;
-    }
-    return status;
+    return nfsClient->write(path, writeBuf, size, offset);
 }
 
 static int handleUnlink( const char* path ) {
-    int status = nfsClient->unlink(path);
-    if (status != 0) {
-
-    }
-    return 0;
+    return nfsClient->unlink(path);
 }
 
 static int handleRename( const char* oldName, const char* newName ) {
-    int status = nfsClient->rename(oldName, newName);
-    if (status != 0) {
-
-    }
-    return 0;
+    return nfsClient->rename(oldName, newName);
 }
 
 static int handleUtimens( const char* path, const struct timespec* tv ) {
@@ -331,7 +331,7 @@ static struct fsOperations : fuse_operations {
         write   = handleWrite;
         unlink  = handleUnlink;
         rename  = handleRename;
-        utimens = handleUtimens;
+        //utimens = handleUtimens;
     }
 } fsOps;
 
