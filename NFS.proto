@@ -3,11 +3,13 @@ package SimpleNetworkFilesystem;
 
 service NFS {
   rpc getattr (Path) returns (Stat) {}
-  rpc readdir(Path) returns (stream Dirent) {}
-  rpc open(FuseFileInfo) returns (FuseFileInfo) {}
-  rpc read(ReadRequest) returns (ReadReply) {}
-  rpc write(WriteRequest) returns (WriteReply){}
-  rpc create(CreateRequest) returns (FuseFileInfo) {}
+  rpc readdir (Path) returns (stream Dirent) {}
+  rpc open (FuseFileInfo) returns (FuseFileInfo) {}
+  rpc read (ReadRequest) returns (ReadReply) {}
+  rpc write (WriteRequest) returns (WriteReply){}
+  rpc create (CreateRequest) returns (FuseFileInfo) {}
+  rpc mkdir (MkdirRequest) returns (DirReply) {}
+  rpc rmdir (Path) returns (DirReply) {}
 }
 
 message Path {
@@ -77,4 +79,13 @@ message CreateRequest {
   string path = 1;
   uint32 mode = 2;
   int32 flags = 3;
+}
+
+message MkdirRequest {
+  string path = 1;
+  uint32 mode = 2;
+}
+
+message DirReply {
+  int32 err = 1;
 }

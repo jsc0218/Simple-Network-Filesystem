@@ -151,6 +151,32 @@ class NFSServiceImpl final : public NFS::Service {
         close(fh);
         return Status::OK;
     }
+
+    Status mkdir(ServerContext* context, const MkdirRequest* request,
+    		     DirReply* reply) override {
+        string serverPath = translatePath(request->path());
+        int res = ::mkdir(serverPath.c_str(), request->mode());
+        if (res == -1) {
+            cout << "mkdir errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_err(0);
+        }
+        return Status::OK;
+    }
+
+    Status rmdir(ServerContext* context, const Path* path,
+    	         DirReply* reply) override {
+        string serverPath = translatePath(path->path());
+        int res = ::rmdir(serverPath.c_str());
+        if (res == -1) {
+        	cout << "rmdir errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_err(0);
+        }
+        return Status::OK;
+    }
 };
 
 void RunServer() {
