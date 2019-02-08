@@ -167,7 +167,7 @@ class NFSServiceImpl final : public NFS::Service {
     	string serverPath = translatePath(path->path());
         int res = ::unlink(serverPath.c_str());
         if (res == -1) {
-        	cout << "unlink errno:" << errno << endl;
+            cout << "unlink errno:" << errno << endl;
             reply->set_err(errno);
         } else {
             reply->set_err(0);
