@@ -27,6 +27,7 @@ using grpc::Status;
 using SimpleNetworkFilesystem::Path;
 using SimpleNetworkFilesystem::Stat;
 using SimpleNetworkFilesystem::NFS;
+using SimpleNetworkFilesystem::Dirent;
 
 using namespace std;
 
@@ -44,6 +45,7 @@ class NFSClient {
     NFSClient(shared_ptr<Channel> channel) : stub(NFS::NewStub(channel)) {}
 
     int getAttr( const string& path, Stat* stat ) {
+        cout << "getAttr for " << path << endl;
         Path pathMessage;
         pathMessage.set_path(path);
         ClientContext context;
@@ -54,7 +56,30 @@ class NFSClient {
         return 0;
     }
 
-    int readdir() {
+    int readdir( const string& path, vector<Dirent>& entries ) {
+        ClientContext context;
+        Path pathMessage;
+        pathMessage.set_path(path);
+        unique_ptr<ClientReader<Dirent>> reader(
+            stub->readdir(&context, pathMessage));
+
+        Dirent entry;
+        while(reader->Read(&entry)){
+            if (entry.err() != 0) {
+                break;
+            }
+            entries.push_back(entry);
+        }
+
+        Status status = reader->Finish();
+        if (!status.ok()) {
+            return -(status.error_code());
+        }
+
+        int err = entry.err();
+        if (err != 0) {
+            return -err;
+        }
         return 0;
     }
 
@@ -117,8 +142,8 @@ static int handleGetattr( const char* path, struct stat* st ) {
         st->st_dev = stat.dev();
         st->st_ino = stat.ino();
         st->st_nlink = stat.nlink();
-        st->st_uid = getuid();
-        st->st_gid = getegid();
+        st->st_uid = stat.uid();
+        st->st_gid = stat.gid();
         st->st_rdev = stat.rdev();
         st->st_blksize = stat.blksize();
         st->st_blocks = stat.blocks();
@@ -134,15 +159,28 @@ static int handleGetattr( const char* path, struct stat* st ) {
 static int handleReaddir( const char* path, void* buf, fuse_fill_dir_t filler,
                           off_t offset, struct fuse_file_info* fi ) {
 
-    int status = nfsClient->readdir();
+    string pathStr(path);
+    vector<Dirent> entries;
+    int status = nfsClient->readdir(pathStr, entries);
     if (status != 0) {
-
+        return status;
     }
 
+    for (vector<Dirent>::iterator it = entries.begin(); it != entries.end(); ++it) {
+        if (it->err() != 0) {
+            status = it->err();
+            break;
+        }
+        struct stat stat{};
+        unsigned char typeChar = it->type().length() > 0 ? it->type()[0] : 0;
+        stat.st_ino = it->ino();
+        stat.st_mode = typeChar << 12;
+        filler(buf, it->name().c_str(), &stat, 0);
+    }
 
-
-
-
+    if (status != 0) {
+        return status;
+    }
     return 0;
 }
 
@@ -169,22 +207,6 @@ static int handleOpen( const char* path, struct fuse_file_info* fi) {
 
 static int handleRead( const char* path, char* buf, size_t size, off_t offset,
                        struct fuse_file_info* fi) {
-    
-    const char* contents = "asdf";
-    
-    if (strcmp(path, "/blah") == 0) {
-        size_t len = strlen(contents);
-        if (offset >= len) {
-            return 0;
-        }
-        else if (offset + size > len) {
-            memcpy(buf, contents + offset, len - offset);
-            return len - offset;
-        }
-        memcpy(buf, contents + offset, size );
-        return size;
-    }
-
     return -ENOENT;
 }
 
