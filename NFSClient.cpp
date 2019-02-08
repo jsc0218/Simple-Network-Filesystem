@@ -55,7 +55,7 @@ using namespace std;
 class NFSClient {
     private:
     unique_ptr<NFS::Stub> stub;
-    map<string, queue<WriteRequest>> writeRequests;
+    map<string, queue<WriteOptRequest>> writeRequests;
     mutex writeRequestsLock;
 
     public:
