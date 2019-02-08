@@ -58,7 +58,7 @@ class NFSClient {
         return 0;
     }
 
-    int rmdir() {
+    int rmdir( const string& path ) {
         return 0;
     }
 
@@ -86,15 +86,15 @@ class NFSClient {
         return 0;
     }
 
-    int unlink() {
+    int unlink( const string& path ) {
         return 0;
     }
 
-    int rename() {
+    int rename( const string& oldName , const string& newName ) {
         return 0;
     }
 
-    int utimens() {
+    int utimens( const string& path, uint64_t seconds, uint64_t nanoseconds ) {
         return 0;
     }
 };
@@ -109,7 +109,7 @@ shared_ptr<NFSClient> nfsClient;
 =========================================================*/
 
 static int handleGetattr( const char* path, struct stat* st ) {
-    string pathStr = path;
+    string pathStr(path);
     Stat stat;
     int status = nfsClient->getAttr(pathStr, &stat);
     if (status == 0 && stat.err() == 0) {
@@ -117,8 +117,8 @@ static int handleGetattr( const char* path, struct stat* st ) {
         st->st_dev = stat.dev();
         st->st_ino = stat.ino();
         st->st_nlink = stat.nlink();
-        st->st_uid = stat.uid(); //getuid();
-        st->st_gid = stat.gid(); //getegid();
+        st->st_uid = getuid();
+        st->st_gid = getegid();
         st->st_rdev = stat.rdev();
         st->st_blksize = stat.blksize();
         st->st_blocks = stat.blocks();
@@ -133,6 +133,16 @@ static int handleGetattr( const char* path, struct stat* st ) {
 
 static int handleReaddir( const char* path, void* buf, fuse_fill_dir_t filler,
                           off_t offset, struct fuse_file_info* fi ) {
+
+    int status = nfsClient->readdir();
+    if (status != 0) {
+
+    }
+
+
+
+
+
     return 0;
 }
 
@@ -184,14 +194,30 @@ static int handleWrite( const char* path, const char* buf, size_t size, off_t of
 }
 
 static int handleUnlink( const char* path ) {
+    string pathStr(path);
+    int status = nfsClient->unlink(pathStr);
+    if (status != 0) {
+
+    }
     return 0;
 }
 
-static int handleRename( const char* path, const char* newPath ) {
+static int handleRename( const char* oldName, const char* newName ) {
+    string oldPathStr(oldName), newPathStr(newName);
+    int status = nfsClient->rename(oldPathStr, newPathStr);
+    if (status != 0) {
+
+    }
     return 0;
 }
 
 static int handleUtimens( const char* path, const struct timespec* tv ) {
+    string pathStr(path);
+    uint64_t seconds = tv->tv_sec, nanoseconds = tv->tv_nsec;
+    int status = nfsClient->utimens(pathStr, seconds, nanoseconds);
+    if (status != 0) {
+
+    }
     return 0;
 }
 
@@ -211,6 +237,12 @@ static struct fsOperations : fuse_operations {
         utimens = handleUtimens;
     }
 } fsOps;
+
+/*=======================================================
+
+    Main
+
+=========================================================*/
 
 int main(int argc, char** argv) {
 
