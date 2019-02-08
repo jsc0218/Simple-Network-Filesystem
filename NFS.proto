@@ -8,8 +8,10 @@ service NFS {
   rpc read (ReadRequest) returns (ReadReply) {}
   rpc write (WriteRequest) returns (WriteReply){}
   rpc create (CreateRequest) returns (FuseFileInfo) {}
-  rpc mkdir (MkdirRequest) returns (DirReply) {}
-  rpc rmdir (Path) returns (DirReply) {}
+  rpc unlink (Path) returns (ErrnoReply) {}
+  rpc mkdir (MkdirRequest) returns (ErrnoReply) {}
+  rpc rmdir (Path) returns (ErrnoReply) {}
+  rpc rename (RenameRequest) returns (ErrnoReply) {}
 }
 
 message Path {
@@ -86,6 +88,11 @@ message MkdirRequest {
   uint32 mode = 2;
 }
 
-message DirReply {
+message ErrnoReply {
   int32 err = 1;
+}
+
+message RenameRequest {
+  string from_path = 1;
+  string to_path = 2;
 }
