@@ -113,6 +113,29 @@ class NFSServiceImpl final : public NFS::Service {
 
         return Status::OK;
     }
+
+    Status write(ServerContext* context, const WriteRequest* request,
+                 WriteReply* reply) override {
+        string serverPath = translatePath(request->path());
+        int fd = ::open(serverPath.c_str(), O_WRONLY);
+        if (fd == -1) {
+        	cout << "write errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            int bytes_write = pwrite(fd, request->buffer().c_str(), request->count(), request->offset());
+            fsync(fd);
+            if (bytes_write == -1) {
+            	cout << "write errno:" << errno << endl;
+                reply->set_err(errno);
+            } else {
+                reply->set_bytes_write(bytes_write);
+                reply->set_err(0);
+            }
+        }
+        close(fd);
+
+        return Status::OK;
+    }
 };
 
 void RunServer() {

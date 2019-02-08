@@ -6,6 +6,7 @@ service NFS {
   rpc readdir(Path) returns (stream Dirent) {}
   rpc open(FuseFileInfo) returns (FuseFileInfo) {}
   rpc read(ReadRequest) returns (ReadReply) {}
+  rpc write(WriteRequest) returns (WriteReply){}
 }
 
 message Path {
@@ -58,3 +59,16 @@ message ReadReply {
   bytes buffer = 2;
   int32 err = 3;
 }
+
+message WriteRequest {
+  string path = 1;
+  uint32 count = 2;
+  int64 offset = 3; 
+  bytes buffer = 4;
+}
+
+message WriteReply {
+  int32 bytes_write = 1;
+  int32 err = 2;
+}
+
