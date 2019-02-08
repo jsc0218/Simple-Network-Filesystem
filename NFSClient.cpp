@@ -29,11 +29,13 @@ using SimpleNetworkFilesystem::Stat;
 using SimpleNetworkFilesystem::NFS;
 using SimpleNetworkFilesystem::Dirent;
 using SimpleNetworkFilesystem::MkdirRequest;
-using SimpleNetworkFilesystem::DirReply;
+using SimpleNetworkFilesystem::ErrnoReply;
 using SimpleNetworkFilesystem::CreateRequest;
 using SimpleNetworkFilesystem::FuseFileInfo;
 using SimpleNetworkFilesystem::ReadReply;
 using SimpleNetworkFilesystem::ReadRequest;
+using SimpleNetworkFilesystem::WriteRequest;
+using SimpleNetworkFilesystem::WriteReply;
 
 using namespace std;
 
@@ -85,7 +87,7 @@ class NFSClient {
         ClientContext context;
         Path pathMessage;
         pathMessage.set_path(path);
-        DirReply response;
+        ErrnoReply response;
         Status status = stub->rmdir(&context, pathMessage, &response);
         if (!status.ok()) {
             return -status.error_code();
@@ -98,7 +100,7 @@ class NFSClient {
         MkdirRequest request;
         request.set_path(path);
         request.set_mode(mode);
-        DirReply response;
+        ErrnoReply response;
         Status status = stub->mkdir(&context, request, &response);
         if (!status.ok()) {
             return -status.error_code();
@@ -142,7 +144,7 @@ class NFSClient {
         return -response.err();
     }
 
-    int read( const string& path, uint64_t count, int64_t offset, string& buf, unsigned long& bytesRead ) {
+    int read( const string& path, uint64_t count, int64_t offset, string& buf ) {
         ClientContext context;
         ReadRequest request;
         request.set_path(path);
@@ -153,15 +155,31 @@ class NFSClient {
         if (!status.ok()) {
             return -status.error_code();
         }
-        bytesRead = response.bytes_read();
+        if (response.err() != 0) {
+            return -response.err();
+        }
+        assert(response.bytes_read() >= 0);
         buf = response.buffer();
-        return -response.err();
+        return response.bytes_read();
     }
 
-    int write() {
+    int write( const string& path, const string& writeBuf, uint32_t count, int64_t offset ) {
         ClientContext context;
-
-        return 0;
+        WriteRequest request;
+        request.set_path(path);
+        request.set_buffer(writeBuf);
+        request.set_count(count);
+        request.set_offset(offset);
+        WriteReply response;
+        Status status = stub->write(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        if (response.err() != 0) {
+            return -response.err();
+        }
+        assert(response.bytes_write() >= 0);
+        return response.bytes_write();
     }
 
     int unlink( const string& path ) {
@@ -238,7 +256,7 @@ static int handleMkdir( const char* path, mode_t mode ) {
 
 static int handleCreate( const char* path, mode_t mode,
                          struct fuse_file_info* fi ) {
-    return 0;
+    return nfsClient->create(path, mode, fi->flags, fi->fh);
 }
 
 static int handleMknod( const char* path, mode_t mode, dev_t dev ) {
@@ -257,18 +275,22 @@ static int handleOpen( const char* path, struct fuse_file_info* fi) {
 static int handleRead( const char* path, char* buf, size_t size, off_t offset,
                        struct fuse_file_info* fi) {
     string readBuffer;
-    unsigned long bytesRead;
-    int status = nfsClient->read(path, size, offset, readBuffer, bytesRead);
-    if (status == 0) {
-        memcpy(buf, readBuffer.c_str(), bytesRead);
-        return bytesRead;
+    int status = nfsClient->read(path, size, offset, readBuffer);
+    if (status >= 0) {
+        memcpy(buf, readBuffer.c_str(), status);
+        return status;
     }
     return status;
 }
 
 static int handleWrite( const char* path, const char* buf, size_t size, off_t offset,
                         struct fuse_file_info* fi ) {
-    return 0;
+    string writeBuf = string(buf, size);
+    int status = nfsClient->write(path, writeBuf, size, offset);
+    if (status >= 0) {
+        return status;
+    }
+    return status;
 }
 
 static int handleUnlink( const char* path ) {
@@ -303,7 +325,7 @@ static struct fsOperations : fuse_operations {
         rmdir   = handleRmdir;
         mkdir   = handleMkdir;
         create  = handleCreate;
-        mknod   = handleMknod;
+        //mknod   = handleMknod;
         open    = handleOpen;
         read    = handleRead;
         write   = handleWrite;
