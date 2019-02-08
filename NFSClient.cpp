@@ -9,6 +9,8 @@
 #include <string>
 #include <algorithm>
 #include <unistd.h>
+#include <map>
+#include <queue>
 
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
@@ -38,6 +40,8 @@ using SimpleNetworkFilesystem::WriteRequest;
 using SimpleNetworkFilesystem::WriteReply;
 using SimpleNetworkFilesystem::RenameRequest;
 using SimpleNetworkFilesystem::UtimensRequest;
+using SimpleNetworkFilesystem::CommitRequest;
+using SimpleNetworkFilesystem::CommitReply;
 
 using namespace std;
 
@@ -50,6 +54,8 @@ using namespace std;
 class NFSClient {
     private:
     unique_ptr<NFS::Stub> stub;
+    map<string, queue<WriteRequest>> writeRequests;
+    mutex writeRequestsLock;
 
     public:
     NFSClient(shared_ptr<Channel> channel) : stub(NFS::NewStub(channel)) {}
@@ -185,6 +191,26 @@ class NFSClient {
         return response.bytes_write();
     }
 
+    int writeOptimized( const string& path, const string& writeBuf, uint32_t count, int64_t offset ) {
+        ClientContext context;
+        WriteRequest request;
+        request.set_path(path);
+        request.set_buffer(writeBuf);
+        request.set_count(count);
+        request.set_offset(offset);
+        WriteReply response;
+        Status status = stub->write(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        if (response.err() != 0) {
+            return -response.err();
+        }
+        assert(response.bytes_write() >= 0);
+        writeRequests[path].push(request);
+        return response.bytes_write();
+    }
+
     int unlink( const string& path ) {
         ClientContext context;
         Path request;
@@ -223,6 +249,24 @@ class NFSClient {
             return -status.error_code();
         }
         return -response.err();
+    }
+
+    int commitWrites( const string& path ) {
+        ClientContext context;
+        CommitRequest request;
+        request.set_path(path);
+        CommitReply response;
+        Status status = stub->commitWrite(&context, request, &response);
+        if (!status.ok()) {
+            // If this fails, we retry transmitting the previous write requests
+            //
+            // We should also check if server crashed
+            //
+            // TODO
+            //
+        }
+        writeRequests.erase(path);
+        return 0;
     }
 };
 
@@ -327,6 +371,14 @@ static int handleUtimens( const char* path, const struct timespec* tv ) {
     return nfsClient->utimens(path, accessedSec, accessedNano, modifiedSec, modifiedNano);
 }
 
+static int handleFsync( const char* path, int isDataSync, struct fuse_file_info* fi ) {
+    return nfsClient->commitWrites(path);
+}
+
+static int handleFlush( const char* path, struct fuse_file_info* fi ) {
+    return nfsClient->commitWrites(path);
+}
+
 static struct fsOperations : fuse_operations {
     fsOperations() {
         getattr = handleGetattr;
@@ -341,6 +393,8 @@ static struct fsOperations : fuse_operations {
         unlink  = handleUnlink;
         rename  = handleRename;
         utimens = handleUtimens;
+        fsync   = handleFsync;
+        flush   = handleFlush;
     }
 } fsOps;
 
