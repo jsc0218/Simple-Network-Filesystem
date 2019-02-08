@@ -125,7 +125,7 @@ class NFSServiceImpl final : public NFS::Service {
             int bytes_write = pwrite(fh, request->buffer().c_str(), request->count(), request->offset());
             fsync(fh);
             if (bytes_write == -1) {
-            	cout << "write errno:" << errno << endl;
+                cout << "write errno:" << errno << endl;
                 reply->set_err(errno);
             } else {
                 reply->set_bytes_write(bytes_write);
@@ -142,7 +142,7 @@ class NFSServiceImpl final : public NFS::Service {
     	string serverPath = translatePath(request->path());
         int fh = ::open(serverPath.c_str(), request->flags(), request->mode());
         if (fh == -1) {
-        	cout << "create errno:" << errno << endl;
+            cout << "create errno:" << errno << endl;
             reply->set_err(errno);
         } else {
             reply->set_fh(fh);
@@ -170,7 +170,7 @@ class NFSServiceImpl final : public NFS::Service {
         string serverPath = translatePath(path->path());
         int res = ::rmdir(serverPath.c_str());
         if (res == -1) {
-        	cout << "rmdir errno:" << errno << endl;
+            cout << "rmdir errno:" << errno << endl;
             reply->set_err(errno);
         } else {
             reply->set_err(0);
