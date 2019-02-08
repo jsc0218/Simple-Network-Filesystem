@@ -52,10 +52,10 @@ class NFSServiceImpl final : public NFS::Service {
         Dirent dirent;
         DIR* dp = opendir(serverPath.c_str());
         if (dp == nullptr) {
-        	cout << "readdir errno:" << errno << endl;
-        	dirent.set_err(errno);
+            cout << "readdir errno:" << errno << endl;
+            dirent.set_err(errno);
         } else {
-        	struct dirent* de;
+            struct dirent* de;
             while (de = ::readdir(dp)) {
             	dirent.set_ino(de->d_ino);
             	dirent.set_off(de->d_off);
