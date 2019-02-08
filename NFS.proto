@@ -13,6 +13,7 @@ service NFS {
   rpc rmdir (Path) returns (ErrnoReply) {}
   rpc rename (RenameRequest) returns (ErrnoReply) {}
   rpc utimens(UtimensRequest) returns (ErrnoReply) {}
+  rpc commitWrites(CommitRequest) returns (CommitResponse) {}
 }
 
 message Path {
@@ -38,9 +39,9 @@ message Stat {
 
 message Dirent {
   uint64 ino = 1;
-  int64 off = 2; 
+  int64 off = 2;
   int32 reclen = 3;  // original unsigned short
-  string type = 4;  // original unsigned char 
+  string type = 4;  // original unsigned char
   string name = 5;
   int32 err = 6;
 }
@@ -69,7 +70,7 @@ message ReadReply {
 message WriteRequest {
   string path = 1;
   uint32 count = 2;
-  int64 offset = 3; 
+  int64 offset = 3;
   bytes buffer = 4;
 }
 
@@ -104,4 +105,12 @@ message UtimensRequest {
   int64 access_nsec = 3;
   int64 modify_sec = 4;
   int64 modify_nsec = 5;
+}
+
+message CommitRequest {
+  uint64 fh = 1;
+}
+
+message CommitResponse {
+  int32 err = 1;
 }
