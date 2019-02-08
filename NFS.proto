@@ -11,6 +11,7 @@ service NFS {
   rpc unlink (Path) returns (ErrnoReply) {}
   rpc mkdir (MkdirRequest) returns (ErrnoReply) {}
   rpc rmdir (Path) returns (ErrnoReply) {}
+  rpc rename (RenameRequest) returns (ErrnoReply) {}
 }
 
 message Path {
@@ -89,4 +90,9 @@ message MkdirRequest {
 
 message ErrnoReply {
   int32 err = 1;
+}
+
+message RenameRequest {
+  string from_path = 1;
+  string to_path = 2;
 }

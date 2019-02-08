@@ -190,6 +190,20 @@ class NFSServiceImpl final : public NFS::Service {
         }
         return Status::OK;
     }
+
+    Status rename(ServerContext* context, const RenameRequest* request,
+                  ErrnoReply* reply) override {
+     	string fromPath = translatePath(request->from_path());
+     	string toPath = translatePath(request->to_path());
+        int res = ::rename(fromPath.c_str(), toPath.c_str());
+        if (res == -1) {
+            cout << "rename errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_err(0);
+        }
+        return Status::OK;
+    }
 };
 
 void RunServer() {
