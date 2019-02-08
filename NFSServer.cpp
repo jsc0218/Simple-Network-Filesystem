@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <grpcpp/grpcpp.h>
 #include "NFS.grpc.pb.h"
 
@@ -9,11 +10,8 @@ using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
-using grpc::ServerReader;
-using SimpleNetworkFilesystem::Path;
-using SimpleNetworkFilesystem::Stat;
-using SimpleNetworkFilesystem::NFS;
-
+using grpc::ServerWriter;
+using namespace SimpleNetworkFilesystem;
 using namespace std;
 
 class NFSServiceImpl final : public NFS::Service {
@@ -44,6 +42,32 @@ class NFSServiceImpl final : public NFS::Service {
             reply->set_ctime(st.st_ctim.tv_sec);
             reply->set_err(0);
         }
+        return Status::OK;
+    }
+
+    Status readdir(ServerContext* context, const Path* path,
+                   ServerWriter<Dirent>* writer) override {
+    	// the last entry of return result indicates the errno
+        string serverPath = translatePath(path->path());
+        Dirent dirent;
+        DIR* dp = opendir(serverPath.c_str());
+        if (dp == nullptr) {
+            cout << "readdir errno:" << errno << endl;
+            dirent.set_err(errno);
+        } else {
+            struct dirent* de;
+            while (de = ::readdir(dp)) {
+            	dirent.set_ino(de->d_ino);
+            	dirent.set_off(de->d_off);
+            	dirent.set_reclen(de->d_reclen);
+            	dirent.set_type(string(1, de->d_type));
+            	dirent.set_name(de->d_name);
+                writer->Write(dirent);
+            }
+            dirent.set_err(0);
+        }
+    	closedir(dp);
+    	writer->Write(dirent);
         return Status::OK;
     }
 };
