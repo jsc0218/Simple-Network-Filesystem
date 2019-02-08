@@ -82,6 +82,7 @@ class NFSClient {
         if (!status.ok()) {
             return -status.error_code();
         }
+        entries.pop_back();
         return -entry.err();
     }
 
