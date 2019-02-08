@@ -37,6 +37,7 @@ using SimpleNetworkFilesystem::FuseFileInfo;
 using SimpleNetworkFilesystem::ReadReply;
 using SimpleNetworkFilesystem::ReadRequest;
 using SimpleNetworkFilesystem::WriteRequest;
+using SimpleNetworkFilesystem::WriteOptRequest;
 using SimpleNetworkFilesystem::WriteReply;
 using SimpleNetworkFilesystem::RenameRequest;
 using SimpleNetworkFilesystem::UtimensRequest;
@@ -193,13 +194,13 @@ class NFSClient {
 
     int writeOptimized( const string& path, const string& writeBuf, uint32_t count, int64_t offset ) {
         ClientContext context;
-        WriteRequest request;
+        WriteOptRequest request;
         request.set_path(path);
         request.set_buffer(writeBuf);
         request.set_count(count);
         request.set_offset(offset);
         WriteReply response;
-        Status status = stub->write(&context, request, &response);
+        Status status = stub->writeOptimized(&context, request, &response);
         if (!status.ok()) {
             return -status.error_code();
         }
@@ -251,7 +252,7 @@ class NFSClient {
         return -response.err();
     }
 
-    int commitWrites( const string& path ) {
+    int commitWrite( const string& path ) {
         ClientContext context;
         CommitRequest request;
         request.set_path(path);
@@ -372,11 +373,11 @@ static int handleUtimens( const char* path, const struct timespec* tv ) {
 }
 
 static int handleFsync( const char* path, int isDataSync, struct fuse_file_info* fi ) {
-    return nfsClient->commitWrites(path);
+    return nfsClient->commitWrite(path);
 }
 
 static int handleFlush( const char* path, struct fuse_file_info* fi ) {
-    return nfsClient->commitWrites(path);
+    return nfsClient->commitWrite(path);
 }
 
 static struct fsOperations : fuse_operations {
