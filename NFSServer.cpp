@@ -16,16 +16,26 @@ using grpc::ServerWriter;
 using namespace SimpleNetworkFilesystem;
 using namespace std;
 
+string serverMount = "/tmp/nfs";
+
 class NFSServiceImpl final : public NFS::Service {
     string translatePath(const string& clientPath) {
-        return "/tmp/nfs" + clientPath;
+        return serverMount + clientPath;
     }
 
+    unordered_set<string> ignoreList = {"/.Trash", "/.Trash-1000", "/.xdg-volume-info", "/autorun.inf"};
+
     Status getattr(ServerContext* context, const Path* path, Stat* reply) override {
-        string serverPath = translatePath(path->path());
+    	string clientPath = path->path();
+    	if (ignoreList.find(clientPath) != ignoreList.end()) {
+    		reply->set_err(0);
+    		return Status::OK;
+    	}
+        string serverPath = translatePath(clientPath);
         struct stat st;
         int res = stat(serverPath.c_str(), &st);
         if (res == -1) {
+        	cout << serverPath << endl;
             cout << "getattr errno:" << errno << endl;
             reply->set_err(errno);
         } else {
@@ -198,6 +208,24 @@ class NFSServiceImpl final : public NFS::Service {
         int res = ::rename(fromPath.c_str(), toPath.c_str());
         if (res == -1) {
             cout << "rename errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_err(0);
+        }
+        return Status::OK;
+    }
+
+    Status utimens(ServerContext* context, const UtimensRequest* request,
+                   ErrnoReply* reply) override {
+        struct timespec ts[2];
+        ts[0].tv_sec = request->access_sec();
+        ts[0].tv_nsec = request->access_nsec();
+        ts[1].tv_sec = request->modify_sec();
+        ts[1].tv_nsec = request->modify_nsec();
+        string serverPath = translatePath(request->path());
+        int res = utimensat(AT_FDCWD, serverPath.c_str(), ts, AT_SYMLINK_NOFOLLOW);
+        if (res == -1) {
+            cout << "utimens errno:" << errno << endl;
             reply->set_err(errno);
         } else {
             reply->set_err(0);
