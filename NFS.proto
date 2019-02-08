@@ -7,6 +7,7 @@ service NFS {
   rpc open(FuseFileInfo) returns (FuseFileInfo) {}
   rpc read(ReadRequest) returns (ReadReply) {}
   rpc write(WriteRequest) returns (WriteReply){}
+  rpc create(CreateRequest) returns (FuseFileInfo) {}
 }
 
 message Path {
@@ -72,3 +73,8 @@ message WriteReply {
   int32 err = 2;
 }
 
+message CreateRequest {
+  string path = 1;
+  uint32 mode = 2;
+  int32 flags = 3;
+}

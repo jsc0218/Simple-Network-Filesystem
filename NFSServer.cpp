@@ -93,12 +93,12 @@ class NFSServiceImpl final : public NFS::Service {
     		    ReadReply* reply) override {
         char* buf = new char[request->count()];
         string serverPath = translatePath(request->path());
-        int fd = ::open(serverPath.c_str(), O_RDONLY);
-        if (fd == -1) {
+        int fh = ::open(serverPath.c_str(), O_RDONLY);
+        if (fh == -1) {
             cout << "read errno:" << errno << endl;
             reply->set_err(errno);
         } else {
-            int bytes_read = pread(fd, buf, request->count(), request->offset());
+            int bytes_read = pread(fh, buf, request->count(), request->offset());
             if (bytes_read == -1) {
             	cout << "read errno:" << errno << endl;
                 reply->set_err(errno);
@@ -108,7 +108,7 @@ class NFSServiceImpl final : public NFS::Service {
                 reply->set_err(0);
             }
         }
-        close(fd);
+        close(fh);
         delete[] buf;
 
         return Status::OK;
@@ -117,13 +117,13 @@ class NFSServiceImpl final : public NFS::Service {
     Status write(ServerContext* context, const WriteRequest* request,
                  WriteReply* reply) override {
         string serverPath = translatePath(request->path());
-        int fd = ::open(serverPath.c_str(), O_WRONLY);
-        if (fd == -1) {
+        int fh = ::open(serverPath.c_str(), O_WRONLY);
+        if (fh == -1) {
         	cout << "write errno:" << errno << endl;
             reply->set_err(errno);
         } else {
-            int bytes_write = pwrite(fd, request->buffer().c_str(), request->count(), request->offset());
-            fsync(fd);
+            int bytes_write = pwrite(fh, request->buffer().c_str(), request->count(), request->offset());
+            fsync(fh);
             if (bytes_write == -1) {
             	cout << "write errno:" << errno << endl;
                 reply->set_err(errno);
@@ -132,8 +132,23 @@ class NFSServiceImpl final : public NFS::Service {
                 reply->set_err(0);
             }
         }
-        close(fd);
+        close(fh);
 
+        return Status::OK;
+    }
+
+    Status create(ServerContext* context, const CreateRequest* request,
+    		      FuseFileInfo* reply) override {
+    	string serverPath = translatePath(request->path());
+        int fh = ::open(serverPath.c_str(), request->flags(), request->mode());
+        if (fh == -1) {
+        	cout << "create errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_fh(fh);
+            reply->set_err(0);
+        }
+        close(fh);
         return Status::OK;
     }
 };
