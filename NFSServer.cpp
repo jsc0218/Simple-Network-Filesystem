@@ -152,8 +152,21 @@ class NFSServiceImpl final : public NFS::Service {
         return Status::OK;
     }
 
+    Status unlink(ServerContext* context, const Path* path,
+                  ErrnoReply* reply) override {
+    	string serverPath = translatePath(path->path());
+        int res = ::unlink(serverPath.c_str());
+        if (res == -1) {
+        	cout << "unlink errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_err(0);
+        }
+        return Status::OK;
+    }
+
     Status mkdir(ServerContext* context, const MkdirRequest* request,
-    		     DirReply* reply) override {
+    		     ErrnoReply* reply) override {
         string serverPath = translatePath(request->path());
         int res = ::mkdir(serverPath.c_str(), request->mode());
         if (res == -1) {
@@ -166,7 +179,7 @@ class NFSServiceImpl final : public NFS::Service {
     }
 
     Status rmdir(ServerContext* context, const Path* path,
-    	         DirReply* reply) override {
+    		     ErrnoReply* reply) override {
         string serverPath = translatePath(path->path());
         int res = ::rmdir(serverPath.c_str());
         if (res == -1) {
