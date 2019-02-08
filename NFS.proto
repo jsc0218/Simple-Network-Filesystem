@@ -4,6 +4,10 @@ package SimpleNetworkFilesystem;
 service NFS {
   rpc getattr (Path) returns (Stat) {}
   rpc readdir(Path) returns (stream Dirent) {}
+  rpc open(FuseFileInfo) returns (FuseFileInfo) {}
+  rpc read(ReadRequest) returns (ReadReply) {}
+  rpc write(WriteRequest) returns (WriteReply){}
+  rpc create(CreateRequest) returns (FuseFileInfo) {}
 }
 
 message Path {
@@ -34,4 +38,43 @@ message Dirent {
   string type = 4;  // original unsigned char 
   string name = 5;
   int32 err = 6;
+}
+
+message FuseFileInfo {
+  int32 flags = 1;  // Open flags. Available in open() and release()
+  int32 writepage = 2;  // In case of a write operation indicates if this was caused by a writepage
+  uint64 fh = 3;  // File handle.  May be filled in by filesystem in open(). Available in all other file operations
+  uint64 lock_owner = 4;  // Lock owner id.  Available in locking operations and flush
+  int32 err = 5;
+  string path = 6;
+}
+
+message ReadRequest {
+  string path = 1;
+  uint64 count = 2;
+  int64 offset = 3;
+}
+
+message ReadReply {
+  int32 bytes_read = 1;
+  bytes buffer = 2;
+  int32 err = 3;
+}
+
+message WriteRequest {
+  string path = 1;
+  uint32 count = 2;
+  int64 offset = 3; 
+  bytes buffer = 4;
+}
+
+message WriteReply {
+  int32 bytes_write = 1;
+  int32 err = 2;
+}
+
+message CreateRequest {
+  string path = 1;
+  uint32 mode = 2;
+  int32 flags = 3;
 }

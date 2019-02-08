@@ -3,6 +3,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <grpcpp/grpcpp.h>
 #include "NFS.grpc.pb.h"
 
@@ -68,6 +70,85 @@ class NFSServiceImpl final : public NFS::Service {
         }
     	closedir(dp);
     	writer->Write(dirent);
+        return Status::OK;
+    }
+
+    Status open(ServerContext* context, const FuseFileInfo* request,
+                FuseFileInfo* reply) override {
+    	// where to get writepage and lock_owner?
+        string serverPath = translatePath(request->path());
+        int fh = ::open(serverPath.c_str(), request->flags());
+        if (fh == -1) {
+            cout << "open errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_fh(fh);
+            reply->set_err(0);
+        }
+        close(fh);
+        return Status::OK;
+    }
+
+    Status read(ServerContext* context, const ReadRequest* request,
+    		    ReadReply* reply) override {
+        char* buf = new char[request->count()];
+        string serverPath = translatePath(request->path());
+        int fh = ::open(serverPath.c_str(), O_RDONLY);
+        if (fh == -1) {
+            cout << "read errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            int bytes_read = pread(fh, buf, request->count(), request->offset());
+            if (bytes_read == -1) {
+            	cout << "read errno:" << errno << endl;
+                reply->set_err(errno);
+            } else {
+                reply->set_bytes_read(bytes_read);
+                reply->set_buffer(buf);
+                reply->set_err(0);
+            }
+        }
+        close(fh);
+        delete[] buf;
+
+        return Status::OK;
+    }
+
+    Status write(ServerContext* context, const WriteRequest* request,
+                 WriteReply* reply) override {
+        string serverPath = translatePath(request->path());
+        int fh = ::open(serverPath.c_str(), O_WRONLY);
+        if (fh == -1) {
+        	cout << "write errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            int bytes_write = pwrite(fh, request->buffer().c_str(), request->count(), request->offset());
+            fsync(fh);
+            if (bytes_write == -1) {
+            	cout << "write errno:" << errno << endl;
+                reply->set_err(errno);
+            } else {
+                reply->set_bytes_write(bytes_write);
+                reply->set_err(0);
+            }
+        }
+        close(fh);
+
+        return Status::OK;
+    }
+
+    Status create(ServerContext* context, const CreateRequest* request,
+    		      FuseFileInfo* reply) override {
+    	string serverPath = translatePath(request->path());
+        int fh = ::open(serverPath.c_str(), request->flags(), request->mode());
+        if (fh == -1) {
+        	cout << "create errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_fh(fh);
+            reply->set_err(0);
+        }
+        close(fh);
         return Status::OK;
     }
 };
