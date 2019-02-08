@@ -3,6 +3,7 @@ package SimpleNetworkFilesystem;
 
 service NFS {
   rpc getattr (Path) returns (Stat) {}
+  rpc readdir(Path) returns (stream Dirent) {}
 }
 
 message Path {
@@ -24,4 +25,13 @@ message Stat {
   int64 mtime = 12;  /* Time of last modification.  */
   int64 ctime = 13;  /* Time of last status change.  */
   int32 err = 14;  /* error number  */
+}
+
+message Dirent {
+  uint64 ino = 1;
+  int64 off = 2; 
+  int32 reclen = 3;  // original unsigned short
+  string type = 4;  // original unsigned char 
+  string name = 5;
+  int32 err = 6;
 }
