@@ -12,8 +12,8 @@ service NFS {
   rpc mkdir (MkdirRequest) returns (ErrnoReply) {}
   rpc rmdir (Path) returns (ErrnoReply) {}
   rpc rename (RenameRequest) returns (ErrnoReply) {}
-  rpc utimens(UtimensRequest) returns (ErrnoReply) {}
-  rpc commitWrite(CommitRequest) returns (CommitReply) {}
+  rpc utimens (UtimensRequest) returns (ErrnoReply) {}
+  rpc commitWrite (CommitRequest) returns (CommitReply) {}
 }
 
 message Path {
