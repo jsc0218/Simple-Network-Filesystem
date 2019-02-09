@@ -169,10 +169,10 @@ class NFSClient {
         return response.bytes_read();
     }
 
-    int write( const string& path, const string& writeBuf, uint32_t count, int64_t offset ) {
+    int write( uint64_t fh, const string& writeBuf, uint32_t count, int64_t offset ) {
         ClientContext context;
         WriteRequest request;
-        request.set_path(path);
+        request.set_fh(fh);
         request.set_buffer(writeBuf);
         request.set_count(count);
         request.set_offset(offset);
@@ -337,7 +337,7 @@ static int handleRead( const char* path, char* buf, size_t size, off_t offset,
 static int handleWrite( const char* path, const char* buf, size_t size, off_t offset,
                         struct fuse_file_info* fi ) {
     string writeBuf = string(buf, size);
-    return nfsClient->write(path, writeBuf, size, offset);
+    return nfsClient->write(fi->fh, writeBuf, size, offset);
 }
 
 static int handleUnlink( const char* path ) {
