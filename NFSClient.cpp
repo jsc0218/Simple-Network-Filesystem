@@ -38,6 +38,8 @@ using SimpleNetworkFilesystem::WriteRequest;
 using SimpleNetworkFilesystem::WriteReply;
 using SimpleNetworkFilesystem::RenameRequest;
 using SimpleNetworkFilesystem::UtimensRequest;
+using SimpleNetworkFilesystem::CommitReply;
+using SimpleNetworkFilesystem::CommitRequest;
 
 using namespace std;
 
@@ -224,6 +226,18 @@ class NFSClient {
         }
         return -response.err();
     }
+
+    int commitWrite( uint64_t fh ) {
+        ClientContext context;
+        CommitRequest request;
+        request.set_fh(fh);
+        CommitReply response;
+        Status status = stub->commitWrite(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
+    }
 };
 
 shared_ptr<NFSClient> nfsClient;
@@ -327,6 +341,16 @@ static int handleUtimens( const char* path, const struct timespec* tv ) {
     return nfsClient->utimens(path, accessedSec, accessedNano, modifiedSec, modifiedNano);
 }
 
+static int handleFsync( const char* path, int i, struct fuse_file_info* fi ) {
+    int status = nfsClient->commitWrite(fi->fh);
+    return status;
+}
+
+static int handleFlush( const char* path, struct fuse_file_info* fi ) {
+    int status = nfsClient->commitWrite(fi->fh);
+    return status;
+}
+
 static struct fsOperations : fuse_operations {
     fsOperations() {
         getattr = handleGetattr;
@@ -341,6 +365,8 @@ static struct fsOperations : fuse_operations {
         unlink  = handleUnlink;
         rename  = handleRename;
         utimens = handleUtimens;
+        fsync   = handleFsync;
+        flush   = handleFlush;
     }
 } fsOps;
 
