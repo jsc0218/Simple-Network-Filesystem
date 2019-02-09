@@ -105,6 +105,7 @@ message UtimensRequest {
   int64 access_nsec = 3;
   int64 modify_sec = 4;
   int64 modify_nsec = 5;
+}
 
 message CommitRequest {
   uint64 fh = 1;
