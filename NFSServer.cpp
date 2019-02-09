@@ -246,7 +246,7 @@ class NFSServiceImpl final : public NFS::Service {
     }
 
     Status close(ServerContext* context, const CloseRequest* request,
-        		 ErrnoReply* reply) override {
+                 ErrnoReply* reply) override {
         int res = ::close(request->fh());
         if (res == -1) {
             cout << "close errno:" << errno << endl;
