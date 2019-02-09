@@ -9,6 +9,8 @@
 #include <string>
 #include <algorithm>
 #include <unistd.h>
+#include <map>
+#include <vector>
 
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
@@ -44,6 +46,15 @@ using SimpleNetworkFilesystem::ReleaseRequest;
 
 using namespace std;
 
+struct ServerFile {
+    uint64_t fh;
+    uint64_t sessionId;
+    string path;
+    int32_t flags;
+};
+
+typedef UserFile uint64_t;
+
 /*=======================================================
 
     gRPC Connections to Server
@@ -53,6 +64,47 @@ using namespace std;
 class NFSClient {
     private:
     unique_ptr<NFS::Stub> stub;
+
+    map<UserFile, ServerFile> fileMap;
+
+    uint64_t getNewUserFileHandle() {
+        for (int i = 100; i < 1024; i++) {
+            if (fileMap.find(i) == fileMap.end()) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    int retryRead(uint64_t userFh, ReadReply* readResonse) {
+        ClientContext context;
+        FuseFileInfo request, response;
+
+        const int timesToRetry = 100;
+        for (int i = 0; i < timesToRetry; i++) {
+            usleep(1000);
+            request.set_path(path);
+            request.set_flags(flags);
+            Status status = stub->open(&context, request, &response);
+            if (status.ok() && response.err() == 0) {
+                fileMap[userFh].fh = response.fh();
+                fileMap[userFh].sessionId = response.sessionid();
+
+                ReadRequest readRequest;
+                request.set_fh(serverFile.fh);
+                request.set_sessionid(servreFile.sessionId)
+                request.set_count(count);
+                request.set_offset(offset);
+                status = stub->read(&context, request, readResponse);
+
+                if (status.ok() && response.err() == 0) {
+                    break;
+                }
+            }
+        }
+        return 0;
+    }
+
 
     public:
     NFSClient(shared_ptr<Channel> channel) : stub(NFS::NewStub(channel)) {}
@@ -128,16 +180,17 @@ class NFSClient {
         if (response.err() != 0) {
             return -response.err();
         }
-        fh = response.fh();
+        if (response.err() == 0) {
+            uint64_t serverFileHandle = response.fh();
+            uint64_t serverSession = response.sessionid();
+            uint64_t userFileHandle = getNewUserFileHandle();
+            fileMap[userFileHandle] = { .fh = serverFileHandle, .sessionId = serverSession, .path = path };
+            fh = userFileHandle;
+        }
         return 0;
     }
 
-    int mkdnod( const string& path ) {
-        ClientContext context;
-
-    }
-
-    int open( const string& path, int32_t flags, uint64_t& fileHandle ) {
+    int open( const string& path, int32_t flags, uint64_t& fh ) {
         ClientContext context;
         FuseFileInfo request, response;
         request.set_path(path);
@@ -146,20 +199,35 @@ class NFSClient {
         if (!status.ok()) {
             return -status.error_code();
         }
-        fileHandle = response.fh();
+        if (response.err() == 0) {
+            uint64_t serverFileHandle = response.fh();
+            uint64_t serverSession = response.sessionid();
+            uint64_t userFileHandle = getNewUserFileHandle();
+            fileMap[userFileHandle] = { .fh = serverFileHandle, .sessionId = serverSession, .path = path };
+            fh = userFileHandle;
+        }
         return -response.err();
     }
 
-    int read( uint64_t fh, uint64_t count, int64_t offset, string& buf ) {
+    int read( uint64_t userFh, uint64_t count, int64_t offset, string& buf ) {
         ClientContext context;
+
+        ServerFile serverFile = fileMap[userFh];
+
         ReadRequest request;
-        request.set_fh(fh);
+        request.set_fh(serverFile.fh);
+        request.set_sessionid(servreFile.sessionId)
         request.set_count(count);
         request.set_offset(offset);
         ReadReply response;
-        Status status = stub->read(&context, request, &response);
-        if (!status.ok()) {
-            return -status.error_code();
+
+        Status status;
+        do {
+            status = stub->read(&context, request, &response);
+        } while (!status.ok());
+
+        if (response.err() == -1000000) {
+            return retryRead(userFh);
         }
         if (response.err() != 0) {
             return -response.err();
@@ -169,7 +237,7 @@ class NFSClient {
         return response.bytes_read();
     }
 
-    int write( uint64_t fh, const string& writeBuf, uint32_t count, int64_t offset ) {
+    int write( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset ) {
         ClientContext context;
         WriteRequest request;
         request.set_fh(fh);
@@ -228,7 +296,7 @@ class NFSClient {
         return -response.err();
     }
 
-    int commitWrite( uint64_t fh ) {
+    int commitWrite( uint64_t userFh ) {
         ClientContext context;
         CommitRequest request;
         request.set_fh(fh);
@@ -240,7 +308,7 @@ class NFSClient {
         return -response.err();
     }
 
-    int release( uint64_t fh ) {
+    int release( uint64_t userFh ) {
         ClientContext context;
         ReleaseRequest request;
         request.set_fh(fh);
