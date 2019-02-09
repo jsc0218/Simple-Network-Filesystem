@@ -13,8 +13,6 @@ service NFS {
   rpc rmdir (Path) returns (ErrnoReply) {}
   rpc rename (RenameRequest) returns (ErrnoReply) {}
   rpc utimens(UtimensRequest) returns (ErrnoReply) {}
-  rpc uncommitWrite(WriteOptRequest) returns (ErrnoReply) {}
-  rpc commitWrite(CommitRequest) returns (CommitReply) {}
 }
 
 message Path {
@@ -106,19 +104,4 @@ message UtimensRequest {
   int64 access_nsec = 3;
   int64 modify_sec = 4;
   int64 modify_nsec = 5;
-}
-
-message WriteOptRequest {
-  uint64 fh = 1;
-  uint32 count = 2;
-  int64 offset = 3;
-  bytes buffer = 4;
-}
-
-message CommitRequest {
-  uint64 fh = 1;
-}
-
-message CommitReply {
-  int32 err = 1;
 }
