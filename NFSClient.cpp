@@ -40,7 +40,7 @@ using SimpleNetworkFilesystem::RenameRequest;
 using SimpleNetworkFilesystem::UtimensRequest;
 using SimpleNetworkFilesystem::CommitReply;
 using SimpleNetworkFilesystem::CommitRequest;
-using SimpleNetworkFilesystem::CloseRequest;
+using SimpleNetworkFilesystem::ReleaseRequest;
 
 using namespace std;
 
@@ -150,10 +150,10 @@ class NFSClient {
         return -response.err();
     }
 
-    int read( const string& path, uint64_t count, int64_t offset, string& buf ) {
+    int read( uint64_t fh, uint64_t count, int64_t offset, string& buf ) {
         ClientContext context;
         ReadRequest request;
-        request.set_path(path);
+        request.set_fh(fh);
         request.set_count(count);
         request.set_offset(offset);
         ReadReply response;
@@ -240,12 +240,12 @@ class NFSClient {
         return -response.err();
     }
 
-    int close( uint64_t fh ) {
+    int release( uint64_t fh ) {
         ClientContext context;
-        CloseRequest request;
+        ReleaseRequest request;
         request.set_fh(fh);
         ErrnoReply response;
-        Status status = stub->close(&context, request, &response);
+        Status status = stub->release(&context, request, &response);
         if (!status.ok()) {
             return -status.error_code();
         }
@@ -327,7 +327,7 @@ static int handleOpen( const char* path, struct fuse_file_info* fi) {
 static int handleRead( const char* path, char* buf, size_t size, off_t offset,
                        struct fuse_file_info* fi) {
     string readBuffer;
-    int status = nfsClient->read(path, size, offset, readBuffer);
+    int status = nfsClient->read(fi->fh, size, offset, readBuffer);
     if (status >= 0) {
         memcpy(buf, readBuffer.c_str(), status);
     }
@@ -359,8 +359,8 @@ static int handleFsync( const char* path, int i, struct fuse_file_info* fi ) {
     return status;
 }
 
-static int handleFlush( const char* path, struct fuse_file_info* fi ) {
-    int status = nfsClient->close(fi->fh);
+static int handleRelease( const char* path, struct fuse_file_info* fi ) {
+    int status = nfsClient->release(fi->fh);
     return status;
 }
 
@@ -379,7 +379,7 @@ static struct fsOperations : fuse_operations {
         rename  = handleRename;
         utimens = handleUtimens;
         fsync   = handleFsync;
-        flush   = handleFlush;
+        release = handleRelease;
     }
 } fsOps;
 

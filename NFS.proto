@@ -14,7 +14,7 @@ service NFS {
   rpc rename (RenameRequest) returns (ErrnoReply) {}
   rpc utimens (UtimensRequest) returns (ErrnoReply) {}
   rpc commitWrite (CommitRequest) returns (CommitReply) {}
-  rpc close (CloseRequest) returns (ErrnoReply) {}
+  rpc release (ReleaseRequest) returns (ErrnoReply) {}
 }
 
 message Path {
@@ -57,7 +57,7 @@ message FuseFileInfo {
 }
 
 message ReadRequest {
-  string path = 1;
+  uint64 fh = 1;
   uint64 count = 2;
   int64 offset = 3;
 }
@@ -116,6 +116,6 @@ message CommitReply {
   int32 err = 1;
 }
 
-message CloseRequest {
+message ReleaseRequest {
   uint64 fh = 1;
 }
