@@ -54,12 +54,14 @@ message FuseFileInfo {
   uint64 lock_owner = 4;  // Lock owner id.  Available in locking operations and flush
   int32 err = 5;
   string path = 6;
+  uint64 sessionId = 7;
 }
 
 message ReadRequest {
   uint64 fh = 1;
   uint64 count = 2;
   int64 offset = 3;
+  uint64 sessionId = 4;
 }
 
 message ReadReply {
@@ -73,6 +75,7 @@ message WriteRequest {
   uint32 count = 2;
   int64 offset = 3;
   bytes buffer = 4;
+  uint64 sessionId = 5;
 }
 
 message WriteReply {
@@ -110,6 +113,7 @@ message UtimensRequest {
 
 message CommitRequest {
   uint64 fh = 1;
+  uint64 sessionId = 2;
 }
 
 message CommitReply {
@@ -118,4 +122,5 @@ message CommitReply {
 
 message ReleaseRequest {
   uint64 fh = 1;
+  uint64 sessionId = 2;
 }
