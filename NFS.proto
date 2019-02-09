@@ -117,5 +117,5 @@ message CommitReply {
 }
 
 message CloseRequest {
-  int32 fh = 1;
+  uint64 fh = 1;
 }
