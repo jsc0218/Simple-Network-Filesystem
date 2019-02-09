@@ -69,7 +69,7 @@ message ReadReply {
 }
 
 message WriteRequest {
-  string path = 1;
+  uint64 fh = 1;
   uint32 count = 2;
   int64 offset = 3;
   bytes buffer = 4;
