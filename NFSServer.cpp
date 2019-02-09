@@ -95,7 +95,7 @@ class NFSServiceImpl final : public NFS::Service {
             reply->set_fh(fh);
             reply->set_err(0);
         }
-        close(fh);
+        ::close(fh);
         return Status::OK;
     }
 
@@ -118,7 +118,7 @@ class NFSServiceImpl final : public NFS::Service {
                 reply->set_err(0);
             }
         }
-        close(fh);
+        ::close(fh);
         delete[] buf;
 
         return Status::OK;
@@ -142,7 +142,7 @@ class NFSServiceImpl final : public NFS::Service {
                 reply->set_err(0);
             }
         }
-        close(fh);
+        ::close(fh);
 
         return Status::OK;
     }
@@ -158,7 +158,7 @@ class NFSServiceImpl final : public NFS::Service {
             reply->set_fh(fh);
             reply->set_err(0);
         }
-        close(fh);
+        ::close(fh);
         return Status::OK;
     }
 
@@ -234,10 +234,22 @@ class NFSServiceImpl final : public NFS::Service {
     }
 
     Status commitWrite(ServerContext* context, const CommitRequest* request,
-    		           CommitReply* reply) override {
+    	               CommitReply* reply) override {
         int res = fsync(request->fh());
         if (res == -1) {
             cout << "commitWrite errno:" << errno << endl;
+            reply->set_err(errno);
+        } else {
+            reply->set_err(0);
+        }
+        return Status::OK;
+    }
+
+    Status close(ServerContext* context, const CloseRequest* request,
+        		 ErrnoReply* reply) override {
+        int res = ::close(request->fh());
+        if (res == -1) {
+            cout << "close errno:" << errno << endl;
             reply->set_err(errno);
         } else {
             reply->set_err(0);

@@ -14,6 +14,7 @@ service NFS {
   rpc rename (RenameRequest) returns (ErrnoReply) {}
   rpc utimens (UtimensRequest) returns (ErrnoReply) {}
   rpc commitWrite (CommitRequest) returns (CommitReply) {}
+  rpc close (CloseRequest) returns (ErrnoReply) {}
 }
 
 message Path {
@@ -113,4 +114,8 @@ message CommitRequest {
 
 message CommitReply {
   int32 err = 1;
+}
+
+message CloseRequest {
+  int32 fh = 1;
 }
