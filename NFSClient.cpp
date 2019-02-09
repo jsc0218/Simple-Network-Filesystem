@@ -40,6 +40,7 @@ using SimpleNetworkFilesystem::RenameRequest;
 using SimpleNetworkFilesystem::UtimensRequest;
 using SimpleNetworkFilesystem::CommitReply;
 using SimpleNetworkFilesystem::CommitRequest;
+using SimpleNetworkFilesystem::CloseRequest;
 
 using namespace std;
 
@@ -238,6 +239,18 @@ class NFSClient {
         }
         return -response.err();
     }
+
+    int close( uint64_t fh ) {
+        ClientContext context;
+        CloseRequest request;
+        request.set_fh(fh);
+        ErrnoReply response;
+        Status status = stub->close(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        return -response.err();
+    }
 };
 
 shared_ptr<NFSClient> nfsClient;
@@ -347,7 +360,7 @@ static int handleFsync( const char* path, int i, struct fuse_file_info* fi ) {
 }
 
 static int handleFlush( const char* path, struct fuse_file_info* fi ) {
-    int status = nfsClient->commitWrite(fi->fh);
+    int status = nfsClient->close(fi->fh);
     return status;
 }
 
