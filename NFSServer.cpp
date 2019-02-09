@@ -232,20 +232,6 @@ class NFSServiceImpl final : public NFS::Service {
         }
         return Status::OK;
     }
-
-    Status uncommitWrite(ServerContext* context, const WriteOptRequest* request,
-    		             ErrnoReply* reply) override {
-        int bytes_write = pwrite(request->fh(), request->buffer().c_str(), request->count(), request->offset());
-        reply->set_err(0);
-        return Status::OK;
-    }
-
-    Status commitWrite(ServerContext* context, const CommitRequest* request,
-    		            CommitReply* reply) override {
-    	fsync(request->fh());
-    	reply->set_err(0);
-    	return Status::OK;
-    }
 };
 
 void RunServer() {
