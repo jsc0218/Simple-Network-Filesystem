@@ -14,7 +14,7 @@ service NFS {
   rpc rename (RenameRequest) returns (ErrnoReply) {}
   rpc utimens (UtimensRequest) returns (ErrnoReply) {}
   rpc commitWrite (CommitRequest) returns (CommitReply) {}
-  rpc release (ReleaseRequest) returns (ErrnoReply) {}
+  rpc release (ReleaseRequest) returns (CommitReply) {}
 }
 
 message Path {
@@ -68,6 +68,7 @@ message ReadReply {
   int32 bytes_read = 1;
   bytes buffer = 2;
   int32 err = 3;
+  uint64 newSessionId = 4; // Set only if server crashed
 }
 
 message WriteRequest {
@@ -81,6 +82,7 @@ message WriteRequest {
 message WriteReply {
   int32 bytes_write = 1;
   int32 err = 2;
+  uint64 newSessionId = 3; // Set only if server crashed
 }
 
 message CreateRequest {
@@ -118,6 +120,7 @@ message CommitRequest {
 
 message CommitReply {
   int32 err = 1;
+  uint64 newSessionId = 2; // Set only if server crashed
 }
 
 message ReleaseRequest {

@@ -16,6 +16,10 @@ using grpc::ServerWriter;
 using namespace SimpleNetworkFilesystem;
 using namespace std;
 
+const int SERVER_CRASHED = 1000000;
+
+uint64_t sessionId = 0;
+
 string serverMount = "/tmp/nfs";
 
 class NFSServiceImpl final : public NFS::Service {
@@ -93,6 +97,7 @@ class NFSServiceImpl final : public NFS::Service {
             reply->set_err(errno);
         } else {
             reply->set_fh(fh);
+            reply->set_sessionid(sessionId);
             reply->set_err(0);
         }
         return Status::OK;
@@ -100,6 +105,11 @@ class NFSServiceImpl final : public NFS::Service {
 
     Status read(ServerContext* context, const ReadRequest* request,
         		    ReadReply* reply) override {
+        if (request->sessionid() != sessionId) {
+            reply->set_err(SERVER_CRASHED);
+            reply->set_newsessionid(sessionId);
+            return Status::OK;
+        }
         char* buf = new char[request->count()];
         int bytes_read = pread(request->fh(), buf, request->count(), request->offset());
         if (bytes_read == -1) {
@@ -116,6 +126,11 @@ class NFSServiceImpl final : public NFS::Service {
 
     Status write(ServerContext* context, const WriteRequest* request,
                      WriteReply* reply) override {
+        if (request->sessionid() != sessionId) {
+            reply->set_err(SERVER_CRASHED);
+            reply->set_newsessionid(sessionId);
+            return Status::OK;
+        }
         int bytes_write = pwrite(request->fh(), request->buffer().c_str(), request->count(), request->offset());
         ::fsync(request->fh());
         if (bytes_write == -1) {
@@ -137,6 +152,7 @@ class NFSServiceImpl final : public NFS::Service {
             reply->set_err(errno);
         } else {
             reply->set_fh(fh);
+            reply->set_sessionid(sessionId);
             reply->set_err(0);
         }
         return Status::OK;
@@ -215,6 +231,11 @@ class NFSServiceImpl final : public NFS::Service {
 
     Status commitWrite(ServerContext* context, const CommitRequest* request,
     	               CommitReply* reply) override {
+        if (request->sessionid() != sessionId) {
+            reply->set_err(SERVER_CRASHED);
+            reply->set_newsessionid(sessionId);
+            return Status::OK;
+        }
         int res = fsync(request->fh());
         if (res == -1) {
             cout << "commitWrite errno:" << errno << endl;
@@ -226,7 +247,12 @@ class NFSServiceImpl final : public NFS::Service {
     }
 
     Status release(ServerContext* context, const ReleaseRequest* request,
-                     ErrnoReply* reply) override {
+                     CommitReply* reply) override {
+        if (request->sessionid() != sessionId) {
+            reply->set_err(SERVER_CRASHED);
+            reply->set_newsessionid(sessionId);
+            return Status::OK;
+        }
         int res = ::close(request->fh());
         if (res == -1) {
             cout << "release errno:" << errno << endl;
@@ -239,6 +265,7 @@ class NFSServiceImpl final : public NFS::Service {
 };
 
 void RunServer() {
+    sessionId = time(0);
     string server_address("127.0.0.1:8080");
     NFSServiceImpl service;
 

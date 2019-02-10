@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <map>
 #include <vector>
+#include <mutex>
 
 #include <grpc/grpc.h>
 #include <grpcpp/channel.h>
@@ -63,11 +64,17 @@ typedef uint64_t UserFile;
 
 =========================================================*/
 
+#define CLIENT_CONTEXT() \
+    ClientContext context; \
+    context.set_wait_for_ready(true); \
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(1000000)); \
+
 class NFSClient {
     private:
     unique_ptr<NFS::Stub> stub;
-
     map<UserFile, ServerFile> fileMap;
+    map<UserFile, vector<WriteRequest>> fileWrites;
+    mutex crashLock;
 
     void updateFileMapping(uint64_t userFh, uint64_t serverFh, uint64_t sessionId, const string& path, int32_t flags ) {
         fileMap[userFh] = {
@@ -87,11 +94,52 @@ class NFSClient {
         return 0;
     }
 
+    int reopenFile( uint64_t userFh ) {
+        ServerFile serverFile = fileMap[userFh];
+        string path = serverFile.path;
+        int32_t flags = serverFile.flags;
+        return openFileHelper(path, flags, userFh);
+    }
+
+    int openFileHelper( const string& path, int32_t flags, uint64_t userFh ) {
+        CLIENT_CONTEXT();
+
+        FuseFileInfo request, response;
+        request.set_path(path);
+        request.set_flags(flags);
+        Status status = stub->open(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        if (response.err() == 0) {
+            updateFileMapping(userFh, response.fh(), response.sessionid(), path, flags);
+        }
+        return -response.err();
+    }
+
+    int handleServerCrash( uint64_t userFh, uint64_t newSessionId ) {
+        crashLock.lock();
+
+        if (fileMap[userFh].sessionId != newSessionId) {
+            while (reopenFile(userFh) != 0) {
+                cout << "Trying again to reopen file..." << endl;
+            }
+        }
+
+        for (vector<WriteRequest>::iterator it = fileWrites[userFh].begin(); it != fileWrites[userFh].end(); it++) {
+            write(userFh, it->buffer(), it->count(), it->offset());
+        }
+
+        crashLock.unlock();
+        return 0;
+    }
+
     public:
     NFSClient(shared_ptr<Channel> channel) : stub(NFS::NewStub(channel)) {}
 
     int getAttr( const string& path, Stat* stat ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         Path pathMessage;
         pathMessage.set_path(path);
         Status status = stub->getattr(&context, pathMessage, stat);
@@ -102,7 +150,8 @@ class NFSClient {
     }
 
     int readdir( const string& path, vector<Dirent>& entries ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         Path pathMessage;
         pathMessage.set_path(path);
         unique_ptr<ClientReader<Dirent>> reader(stub->readdir(&context, pathMessage));
@@ -123,7 +172,8 @@ class NFSClient {
     }
 
     int rmdir( const string& path ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         Path pathMessage;
         pathMessage.set_path(path);
         ErrnoReply response;
@@ -135,7 +185,8 @@ class NFSClient {
     }
 
     int mkdir( const string& path, uint32_t mode ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         MkdirRequest request;
         request.set_path(path);
         request.set_mode(mode);
@@ -148,7 +199,8 @@ class NFSClient {
     }
 
     int create( const string& path, uint32_t mode, int32_t flags, uint64_t& fh ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         CreateRequest request;
         request.set_path(path);
         request.set_mode(mode);
@@ -170,84 +222,57 @@ class NFSClient {
     }
 
     int open( const string& path, int32_t flags, uint64_t& fh ) {
-        ClientContext context;
-        FuseFileInfo request, response;
-        request.set_path(path);
-        request.set_flags(flags);
-        Status status = stub->open(&context, request, &response);
-        if (!status.ok()) {
-            return -status.error_code();
-        }
-        if (response.err() == 0) {
-            uint64_t newUserFh = getNewUserFileHandle();
-            updateFileMapping(newUserFh, response.fh(), response.sessionid(), path, flags );
+        uint64_t newUserFh = getNewUserFileHandle();
+        int status = openFileHelper(path, flags, newUserFh);
+        if (status == 0) {
             fh = newUserFh;
         }
-        return -response.err();
+        return status;
     }
 
-    int reopenFile( uint64_t userFh ) {
-        string path = fileMap[userFh].path;
-        int32_t flags = fileMap[userFh].flags;
-        ClientContext context;
-        FuseFileInfo request, response;
-        request.set_path(path);
-        request.set_flags(flags);
-        Status status = stub->open(&context, request, &response);
-        if (!status.ok()) {
-            return -status.error_code();
-        }
-        if (response.err() == 0) {
-            updateFileMapping(userFh, response.fh(), response.sessionid(), path, flags );
-        }
-        return -response.err();
+    ReadRequest createReadRequest( uint64_t userFh, uint64_t count, int64_t offset ) {
+        ServerFile serverFile = fileMap[userFh];
+        ReadRequest request;
+        request.set_fh(serverFile.fh);
+        request.set_sessionid(serverFile.sessionId);
+        request.set_count(count);
+        request.set_offset(offset);
+        return request;
     }
 
     int read( uint64_t userFh, uint64_t count, int64_t offset, string& buf ) {
+        CLIENT_CONTEXT();
 
-        ClientContext context;
-        ReadRequest request;
         ReadReply response;
-        bool shouldReopenFile = false;
-        int ret;
-        const int timesToRetry = 100;
+        int ret = 0;
 
-        for (int i = 0; i < timesToRetry; i++) {
-
-            if (shouldReopenFile) {
-                ret = reopenFile(userFh);
-                if (ret < 0) {
-                    continue;
-                }
-            }
-
-            ServerFile serverFile = fileMap[userFh];
-            request.set_fh(serverFile.fh);
-            request.set_sessionid(serverFile.sessionId);
-            request.set_count(count);
-            request.set_offset(offset);
-            Status status = stub->read(&context, request, &response);
+        ReadRequest request = createReadRequest(userFh, count, offset);
+        Status status = stub->read(&context, request, &response);
+        if (!status.ok()) {
+            return -status.error_code();
+        }
+        if (response.err() == SERVER_CRASH_CODE) {
+            // Call the crash handler and try the read again
+            ret = handleServerCrash(userFh, response.newsessionid());
+            request = createReadRequest(userFh, count, offset);
+            status = stub->read(&context, request, &response);
             if (!status.ok()) {
-                ret = -status.error_code();
-                continue;
-            }
-            ret = -response.err();
-            if (response.err() == SERVER_CRASH_CODE) {
-                shouldReopenFile = true;
-            } else if (response.err() == 0) {
-                assert(response.bytes_read() >= 0);
-                buf = response.buffer();
-                return response.bytes_read();
-            } else {
-                return -response.err();
+                return -status.error_code();
             }
         }
 
-        return ret;
+        if (ret = 0) {
+            assert(response.bytes_read() >= 0);
+            buf = response.buffer();
+            return response.bytes_read();
+        }
+
+        return -response.err();
     }
 
     int write( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         WriteRequest request;
         request.set_fh(fileMap[userFh].fh);
         request.set_sessionid(fileMap[userFh].sessionId);
@@ -267,7 +292,8 @@ class NFSClient {
     }
 
     int unlink( const string& path ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         Path request;
         request.set_path(path);
         ErrnoReply response;
@@ -279,7 +305,8 @@ class NFSClient {
     }
 
     int rename( const string& oldName, const string& newName ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         RenameRequest request;
         request.set_from_path(oldName);
         request.set_to_path(newName);
@@ -292,7 +319,8 @@ class NFSClient {
     }
 
     int utimens( const string& path, uint64_t accessedSec, uint64_t accessedNano, uint64_t modifiedSec, uint64_t modifiedNano ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         UtimensRequest request;
         request.set_access_sec(accessedSec);
         request.set_access_nsec(accessedNano);
@@ -307,7 +335,8 @@ class NFSClient {
     }
 
     int commitWrite( uint64_t userFh ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         CommitRequest request;
         request.set_fh(fileMap[userFh].fh);
         request.set_sessionid(fileMap[userFh].sessionId);
@@ -320,11 +349,12 @@ class NFSClient {
     }
 
     int release( uint64_t userFh ) {
-        ClientContext context;
+        CLIENT_CONTEXT();
+
         ReleaseRequest request;
         request.set_fh(fileMap[userFh].fh);
         request.set_sessionid(fileMap[userFh].sessionId);
-        ErrnoReply response;
+        CommitReply response;
         Status status = stub->release(&context, request, &response);
         if (!status.ok()) {
             return -status.error_code();
@@ -451,7 +481,6 @@ static struct fsOperations : fuse_operations {
         rmdir   = handleRmdir;
         mkdir   = handleMkdir;
         create  = handleCreate;
-        //mknod   = handleMknod;
         open    = handleOpen;
         read    = handleRead;
         write   = handleWrite;
