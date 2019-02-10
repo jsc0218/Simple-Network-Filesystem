@@ -62,10 +62,11 @@ class NFSServiceImpl final : public NFS::Service {
     }
 
     Status readdir(ServerContext* context, const Path* path,
-                   ServerWriter<Dirent>* writer) override {
-    	// the last entry of return result indicates the errno
+    	           Dirents* dirents) override {
+//    	the last entry of return result indicates the errno
         string serverPath = translatePath(path->path());
         Dirent dirent;
+        vector<Dirent> dirs;
         DIR* dp = opendir(serverPath.c_str());
         if (dp == nullptr) {
             cout << "readdir errno:" << errno << endl;
@@ -73,17 +74,18 @@ class NFSServiceImpl final : public NFS::Service {
         } else {
             struct dirent* de;
             while (de = ::readdir(dp)) {
-            	dirent.set_ino(de->d_ino);
-            	dirent.set_off(de->d_off);
-            	dirent.set_reclen(de->d_reclen);
-            	dirent.set_type(string(1, de->d_type));
-            	dirent.set_name(de->d_name);
-                writer->Write(dirent);
+                dirent.set_ino(de->d_ino);
+                dirent.set_off(de->d_off);
+                dirent.set_reclen(de->d_reclen);
+                dirent.set_type(string(1, de->d_type));
+                dirent.set_name(de->d_name);
+                dirs.push_back(dirent);
             }
             dirent.set_err(0);
             closedir(dp);
         }
-    	writer->Write(dirent);
+        dirs.push_back(dirent);
+        *(dirents->mutable_dirent()) = {dirs.begin(), dirs.end()};
         return Status::OK;
     }
 

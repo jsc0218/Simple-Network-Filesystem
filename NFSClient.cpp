@@ -31,6 +31,7 @@ using SimpleNetworkFilesystem::Path;
 using SimpleNetworkFilesystem::Stat;
 using SimpleNetworkFilesystem::NFS;
 using SimpleNetworkFilesystem::Dirent;
+using SimpleNetworkFilesystem::Dirents;
 using SimpleNetworkFilesystem::MkdirRequest;
 using SimpleNetworkFilesystem::ErrnoReply;
 using SimpleNetworkFilesystem::CreateRequest;
@@ -153,24 +154,21 @@ class NFSClient {
 
     int readdir( const string& path, vector<Dirent>& entries ) {
         CLIENT_CONTEXT();
+        context.set_idempotent(true);
 
         Path pathMessage;
         pathMessage.set_path(path);
-        unique_ptr<ClientReader<Dirent>> reader(stub->readdir(&context, pathMessage));
-
-        Dirent entry;
-        while(reader->Read(&entry)){
-            if (entry.err() != 0) {
-                break;
-            }
-            entries.push_back(entry);
-        }
-        Status status = reader->Finish();
+        Dirents dirents;
+        Status status = stub->readdir(&context, pathMessage, &dirents);
         if (!status.ok()) {
             return -status.error_code();
         }
+        for (int i=0; i<dirents.dirent_size(); ++i) {
+            entries.push_back(dirents.dirent(i));
+        }
+        int err = entries.back().err();
         entries.pop_back();
-        return -entry.err();
+        return -err;
     }
 
     int rmdir( const string& path ) {

@@ -3,7 +3,7 @@ package SimpleNetworkFilesystem;
 
 service NFS {
   rpc getattr (Path) returns (Stat) {}
-  rpc readdir (Path) returns (stream Dirent) {}
+  rpc readdir (Path) returns  (Dirents) {}
   rpc open (FuseFileInfo) returns (FuseFileInfo) {}
   rpc read (ReadRequest) returns (ReadReply) {}
   rpc write (WriteRequest) returns (WriteReply){}
@@ -45,6 +45,10 @@ message Dirent {
   string type = 4;  // original unsigned char
   string name = 5;
   int32 err = 6;
+}
+
+message Dirents {
+  repeated Dirent dirent = 1;
 }
 
 message FuseFileInfo {
