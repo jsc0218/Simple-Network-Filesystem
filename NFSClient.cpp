@@ -119,21 +119,20 @@ class NFSClient {
     }
 
     int handleServerCrash( uint64_t userFh, uint64_t newSessionId ) {
-        crashLock.lock();
+        lock_guard<mutex> lockGuard (crashLock);
 
         if (fileMap[userFh].sessionId != newSessionId) {
             int status = reopenFile(userFh);
             if (status != 0) {
                 cout << "Failed to reopen file" << endl;
+                return status;
             }
-            return status;
         }
 
         for (vector<WriteRequest>::iterator it = fileWrites[userFh].begin(); it != fileWrites[userFh].end(); it++) {
+            cout << "Rewriting fh " << userFh << " with length " << it->count() << " at offset " << it->offset() << endl;
             write(userFh, it->buffer(), it->count(), it->offset());
         }
-
-        crashLock.unlock();
         return 0;
     }
 
