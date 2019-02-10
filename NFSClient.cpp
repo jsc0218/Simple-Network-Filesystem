@@ -121,9 +121,11 @@ class NFSClient {
         crashLock.lock();
 
         if (fileMap[userFh].sessionId != newSessionId) {
-            while (reopenFile(userFh) != 0) {
-                cout << "Trying again to reopen file..." << endl;
+            int status = reopenFile(userFh);
+            if (status != 0) {
+                cout << "Failed to reopen file" << endl;
             }
+            return status;
         }
 
         for (vector<WriteRequest>::iterator it = fileWrites[userFh].begin(); it != fileWrites[userFh].end(); it++) {
@@ -244,8 +246,6 @@ class NFSClient {
         CLIENT_CONTEXT();
 
         ReadReply response;
-        int ret = 0;
-
         ReadRequest request = createReadRequest(userFh, count, offset);
         Status status = stub->read(&context, request, &response);
         if (!status.ok()) {
@@ -253,7 +253,7 @@ class NFSClient {
         }
         if (response.err() == SERVER_CRASH_CODE) {
             // Call the crash handler and try the read again
-            ret = handleServerCrash(userFh, response.newsessionid());
+            handleServerCrash(userFh, response.newsessionid());
             request = createReadRequest(userFh, count, offset);
             status = stub->read(&context, request, &response);
             if (!status.ok()) {
@@ -261,7 +261,7 @@ class NFSClient {
             }
         }
 
-        if (ret = 0) {
+        if (response.err() == 0) {
             assert(response.bytes_read() >= 0);
             buf = response.buffer();
             return response.bytes_read();
@@ -270,20 +270,35 @@ class NFSClient {
         return -response.err();
     }
 
-    int write( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset ) {
-        CLIENT_CONTEXT();
-
+    WriteRequest makeWriteRequest( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset ) {
         WriteRequest request;
         request.set_fh(fileMap[userFh].fh);
         request.set_sessionid(fileMap[userFh].sessionId);
         request.set_buffer(writeBuf);
         request.set_count(count);
         request.set_offset(offset);
+        return request;
+    }
+
+    int write( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset ) {
+        CLIENT_CONTEXT();
+
+        WriteRequest request = makeWriteRequest(userFh, writeBuf, count, offset);
         WriteReply response;
         Status status = stub->write(&context, request, &response);
         if (!status.ok()) {
             return -status.error_code();
         }
+        if (response.err() == SERVER_CRASH_CODE) {
+            // Handle the crash and try writing again
+            handleServerCrash(userFh, response.newsessionid());
+            request = makeWriteRequest(userFh, writeBuf, count, offset);
+            status = stub->write(&context, request, &response);
+            if (!status.ok()) {
+                return -status.error_code();
+            }
+        }
+        fileWrites[userFh].push_back(request);
         if (response.err() != 0) {
             return -response.err();
         }
@@ -345,6 +360,18 @@ class NFSClient {
         if (!status.ok()) {
             return -status.error_code();
         }
+        if (response.err() == SERVER_CRASH_CODE) {
+            handleServerCrash(userFh, response.newsessionid());
+            request.set_fh(fileMap[userFh].fh);
+            request.set_sessionid(fileMap[userFh].sessionId);
+            status = stub->commitWrite(&context, request, &response);
+            if (!status.ok()) {
+                return -status.error_code();
+            }
+        }
+        if (response.err() == 0) {
+            fileWrites.erase(userFh);
+        }
         return -response.err();
     }
 
@@ -359,6 +386,17 @@ class NFSClient {
         if (!status.ok()) {
             return -status.error_code();
         }
+        if (response.err() == SERVER_CRASH_CODE) {
+            handleServerCrash(userFh, response.newsessionid());
+            request.set_fh(fileMap[userFh].fh);
+            request.set_sessionid(fileMap[userFh].sessionId);
+            status = stub->release(&context, request, &response);
+            if (!status.ok()) {
+                return -status.error_code();
+            }
+        }
+        fileMap.erase(userFh);
+        fileWrites.erase(userFh);
         return -response.err();
     }
 };
