@@ -27,24 +27,7 @@ using grpc::ClientReaderWriter;
 using grpc::ClientWriter;
 using grpc::Status;
 
-using SimpleNetworkFilesystem::Path;
-using SimpleNetworkFilesystem::Stat;
-using SimpleNetworkFilesystem::NFS;
-using SimpleNetworkFilesystem::Dirent;
-using SimpleNetworkFilesystem::Dirents;
-using SimpleNetworkFilesystem::MkdirRequest;
-using SimpleNetworkFilesystem::ErrnoReply;
-using SimpleNetworkFilesystem::CreateRequest;
-using SimpleNetworkFilesystem::FuseFileInfo;
-using SimpleNetworkFilesystem::ReadReply;
-using SimpleNetworkFilesystem::ReadRequest;
-using SimpleNetworkFilesystem::WriteRequest;
-using SimpleNetworkFilesystem::WriteReply;
-using SimpleNetworkFilesystem::RenameRequest;
-using SimpleNetworkFilesystem::UtimensRequest;
-using SimpleNetworkFilesystem::CommitReply;
-using SimpleNetworkFilesystem::CommitRequest;
-using SimpleNetworkFilesystem::ReleaseRequest;
+using namespace SimpleNetworkFilesystem;
 
 using namespace std;
 
@@ -53,6 +36,14 @@ struct ServerFile {
     uint64_t sessionId;
     string path;
     int32_t flags;
+};
+
+struct WriteReq {
+	uint64_t fh;
+	uint32_t count;
+	int64_t offset;
+	string buffer;
+	uint64_t sessionId;
 };
 
 typedef uint64_t UserFile;
@@ -74,7 +65,7 @@ class NFSClient {
     private:
     unique_ptr<NFS::Stub> stub;
     map<UserFile, ServerFile> fileMap;
-    map<UserFile, vector<WriteRequest>> fileWrites;
+    map<UserFile, vector<WriteReq>> fileWrites;
     mutex crashLock;
 
     void updateFileMapping(uint64_t userFh, uint64_t serverFh, uint64_t sessionId, const string& path, int32_t flags ) {
@@ -129,9 +120,10 @@ class NFSClient {
             }
         }
 
-        for (vector<WriteRequest>::iterator it = fileWrites[userFh].begin(); it != fileWrites[userFh].end(); it++) {
-            cout << "Rewriting fh " << userFh << " with length " << it->count() << " at offset " << it->offset() << endl;
-            write(userFh, it->buffer(), it->count(), it->offset());
+        for (auto& req : fileWrites[userFh]) {
+            cout << "Rewriting fh " << userFh << " with length " << req.count
+                 << " at offset " << req.offset << endl;
+            write(userFh, req.buffer, req.count, req.offset, false);
         }
         return 0;
     }
@@ -277,8 +269,8 @@ class NFSClient {
         return request;
     }
 
-    int write( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset ) {
-        CLIENT_CONTEXT();
+    int write( uint64_t userFh, const string& writeBuf, uint32_t count, int64_t offset, bool flag=true) {
+    	CLIENT_CONTEXT();
 
         WriteRequest request = makeWriteRequest(userFh, writeBuf, count, offset);
         WriteReply response;
@@ -290,12 +282,20 @@ class NFSClient {
             // Handle the crash and try writing again
             handleServerCrash(userFh, response.newsessionid());
             request = makeWriteRequest(userFh, writeBuf, count, offset);
+            CLIENT_CONTEXT();  // must a new context, otherwise, assert fail
             status = stub->write(&context, request, &response);
             if (!status.ok()) {
                 return -status.error_code();
             }
         }
-        fileWrites[userFh].push_back(request);
+
+        if (flag) {
+            fileWrites[userFh].push_back({request.fh(),
+        	                              request.count(),
+									      request.offset(),
+									      string(request.buffer()),
+									      request.sessionid()});
+        }
         if (response.err() != 0) {
             return -response.err();
         }
